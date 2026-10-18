@@ -1,6 +1,6 @@
 # Employee Salary Data Model
 
-**Status:** Approved project design for the MVP, subject to Incubyte clarification. This document defines the model; no database, entity classes, or executable migrations have been created.
+**Status:** Approved project design for the MVP, subject to Incubyte clarification. The schema and initial reference records are implemented in Flyway migrations and verified against PostgreSQL 18.6. JPA entity classes and employee business behavior remain future steps.
 
 ## Context and Scope
 
@@ -32,17 +32,19 @@ erDiagram
 
 Database constraints must enforce required values, uniqueness, valid references, nonblank names, and positive finite salary amounts. Application validation provides understandable errors before persistence; database constraints remain the final protection against invalid structural state.
 
-Creation/latest-change timestamps provide operational metadata, not salary history, an audit log, or individual attribution. The API returns ISO 8601 UTC timestamp strings; exact system-managed timestamp initialization remains an implementation concern.
+Creation/latest-change timestamps provide operational metadata, not salary history, an audit log, or individual attribution. Both timestamps default to the transaction timestamp on insert; future application updates must maintain `updated_at`. Version defaults to zero and cannot be negative. The API will return ISO 8601 UTC timestamp strings when employee endpoints are implemented.
 
 ## Reference Data
 
 | Table | Columns | Rules and purpose |
 | --- | --- | --- |
 | `departments` | Identity `id`; required `name VARCHAR(100)` | Primary key and case-insensitive name uniqueness prevent duplicate reporting labels. Names must be nonblank. |
-| `countries` | ISO alpha-2 `code`; required display `name` | Uppercase, two-letter primary key identifies an employment country. |
-| `currencies` | ISO `code`; required display `name`; `minor_units SMALLINT` | Uppercase, three-letter primary key and required minor-unit count from 0 through 4. |
+| `countries` | ISO alpha-2 `code`; required `name VARCHAR(100)` | Uppercase, two-letter primary key identifies an employment country. |
+| `currencies` | ISO `code`; required `name VARCHAR(100)`; `minor_units SMALLINT` | Uppercase, three-letter primary key and required minor-unit count from 0 through 4. |
 
-Use `VARCHAR(2)` for country codes and `VARCHAR(3)` for currency codes. Code-shape constraints and foreign keys do not establish ISO validity by themselves; reference records must come from a verified, supported catalog. Final display-name lengths and reference records will be settled before migrations and seeding.
+Use `VARCHAR(2)` for country codes and `VARCHAR(3)` for currency codes. Code-shape constraints and foreign keys do not establish ISO validity by themselves; reference records must come from a verified, supported catalog. Lookup names are required, nonblank, and at most 100 characters.
+
+The initial catalog contains Engineering, Finance, HR, Sales, Marketing, Operations, Customer Support, and Legal; countries IN, US, GB, DE, JP, and KW; and currencies INR, USD, GBP, EUR, JPY, and KWD. Currency minor units were checked against the [SIX ISO 4217 maintenance data](https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml): JPY uses zero, KWD three, and the others two. These supported records are fixed in V2; extensions require new migrations.
 
 Reference records are controlled through migrations initially. The employee seed script uses those supported records to generate 10,000 synthetic employees. No reference-data administration UI is included in the MVP.
 
@@ -95,18 +97,13 @@ Analytics remains database-side aggregation. Do not add materialized summaries, 
 | Salary-history table now | Excluded: implements deferred product scope. |
 | Free-text department, country, and currency | Rejected: fewer tables but inconsistent filtering/reporting values and weaker reference integrity. |
 
-## Planned Verification
+## Verification
 
-When executable migrations and features are approved, verify against PostgreSQL:
+`FlywayMigrationIT` runs against disposable PostgreSQL 18.6 databases and verifies fresh migration, repeat migration/validation, reference records, required fields, text bounds, canonical codes, unique employee numbers, case-insensitive department uniqueness, foreign keys, minor-unit limits, protected lookup deletion, invalid salary rejection, exact decimal round trips, and version/timestamp defaults. Each test rolls back its changes. It does not use or reset the persistent development database.
 
-- Required fields, nonblank names, identifier uniqueness, and case-insensitive department uniqueness.
-- Foreign keys, valid supported codes, minor-unit limits, and prevention of cascading lookup deletion.
-- Rejection of zero, negative, `NaN`, and out-of-range salary values.
-- Exact round trips, currency-specific precision rejection, insignificant trailing zeros, and validation before database coercion.
-- Atomic employee/compensation updates and stale-edit conflicts, including two browser clients editing the same version.
-- Filtered pagination with a unique sort tie-breaker and independently calculated, separate-currency analytics.
+The initial migration test was run before the SQL existed and failed because zero migrations were found. The implemented schema/reference migrations then passed the full integration suite. PostgreSQL reports `23001` for `ON DELETE RESTRICT`; the delete-protection assertions use that documented state, while invalid references use `23503`.
 
-These database/application tests are planned, not executed. This documentation step checks scope consistency, local links, formatting, and secret patterns.
+Currency-specific input precision rejection, atomic employee use cases, stale browser edits, pagination, and analytics remain application-feature tests for later steps. The schema tests do not imply those business workflows are implemented.
 
 ## Future Expansion
 
@@ -120,6 +117,7 @@ Larger workloads require measured query/index tuning and possibly revised pagina
 
 - [PostgreSQL numeric types, coercion, and special values](https://www.postgresql.org/docs/current/datatype-numeric.html)
 - [PostgreSQL constraints and referential integrity](https://www.postgresql.org/docs/current/ddl-constraints.html)
+- [PostgreSQL error codes](https://www.postgresql.org/docs/current/errcodes-appendix.html)
 - [PostgreSQL index capabilities](https://www.postgresql.org/docs/current/indexes-types.html)
 - [Java 21 currency metadata](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Currency.html)
 - [Jakarta Persistence versioning](https://jakarta.ee/specifications/platform/11/apidocs/jakarta/persistence/version)

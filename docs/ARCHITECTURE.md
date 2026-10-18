@@ -1,6 +1,6 @@
 # Architecture and Engineering Decisions
 
-**Status:** Approved project design for the MVP. Incubyte's clarification remains pending; this is not a statement of additional assessment requirements. The backend bootstrap is implemented; business features, database integration, security, and UI remain planned.
+**Status:** Approved project design for the MVP. Incubyte's clarification remains pending; this is not a statement of additional assessment requirements. The backend and PostgreSQL/Flyway foundations are implemented; business APIs, security, and UI remain planned.
 
 ## Context and Goals
 
@@ -18,7 +18,9 @@ Use a modular monolith: one Spring Boot application, an Angular UI, and PostgreS
 
 The backend bootstrap uses Java 21, Spring Boot 4.1.1, Spring MVC, and Maven Wrapper pinned to Maven 3.9.11 under `backend/`, with package `com.acme.salarymanagement`. The test starter follows Boot's managed JUnit Jupiter 6 and Mockito versions; the user approved JUnit 6 in place of the original JUnit 5 preference. The wrapper verifies the Maven distribution with a pinned SHA-256 checksum.
 
-Spring Data JPA, Jakarta Bean Validation, PostgreSQL, Flyway, and Spring Security remain approved architecture choices to add with their implementation steps. Modern Angular, TypeScript, Angular Material, Reactive Forms, and HttpClient remain the frontend direction; version selection and Angular acceptance are still pending. The [README](../README.md) documents Java selection, build, and local execution.
+PostgreSQL 18.6 runs locally through Docker Compose with loopback access and a persistent project volume. The backend uses the Boot Flyway starter, PostgreSQL-specific Flyway module, and JDBC driver. Testcontainers supplies isolated PostgreSQL databases for integration tests, run by Maven Failsafe during `verify`. Credentials are external to Git; application startup requires configured PostgreSQL and successful migrations.
+
+Spring Data JPA, Jakarta Bean Validation, and Spring Security remain approved architecture choices to add with their implementation steps. Modern Angular, TypeScript, Angular Material, Reactive Forms, and HttpClient remain the frontend direction; version selection and Angular acceptance are still pending. The [README](../README.md) documents Java selection, build, database setup, and local execution.
 
 ## Responsibilities and Boundaries
 
@@ -52,7 +54,7 @@ Build Angular into static assets packaged with Spring Boot for production. This 
 
 During development, run Angular separately and proxy backend requests through its development server. Use relative API URLs so browser requests follow the same-origin pattern.
 
-The trade-off is coupled frontend/backend releases and a build process that assembles both artifacts. A later move to separate static hosting can retain the API boundary but requires packaging, routing, and security configuration changes. Hosting provider, HTTPS termination, build commands, and Docker use remain undecided. No deployment or remote infrastructure is created by this design step.
+The trade-off is coupled frontend/backend releases and a build process that assembles both artifacts. A later move to separate static hosting can retain the API boundary but requires packaging, routing, and security configuration changes. Docker is used for local PostgreSQL and isolated integration tests; production hosting, HTTPS termination, frontend packaging, and production container use remain undecided. No production infrastructure is created by local database setup.
 
 ## Demo Access
 
@@ -74,7 +76,7 @@ A shared configured account provides no individual attribution. In-memory sessio
 
 Use Java `BigDecimal` and PostgreSQL `NUMERIC(19,4)` for positive gross annual base salary with explicit ISO currency codes. Validate currency-specific precision before persistence, because PostgreSQL can round excess scale. Reject non-finite values explicitly. Preserve currencies and separate monetary aggregation by currency. Do not infer currency from employment country or introduce conversion rates.
 
-Paginate and aggregate in PostgreSQL rather than loading the entire dataset into the application or browser. Select indexes from the approved query patterns. Use versioned Flyway migrations and database constraints alongside application validation.
+Paginate and aggregate in PostgreSQL rather than loading the entire dataset into the application or browser. Initial tables, constraints, indexes, and reference data are implemented in two versioned Flyway migrations. Flyway is the sole schema initializer; basic SQL initialization is disabled and Flyway clean is disabled. When JPA entities are added, use schema validation rather than automatic schema mutation. Applied migrations evolve through new versions.
 
 Application services define transaction boundaries for use cases. The employee record has one JPA optimistic-lock version; full updates must carry/check the version originally edited by the client, returning `409` on a stale edit. Required fields, foreign keys, unique employee numbers, case-insensitive department uniqueness, and initial filter indexes are specified in [DATA_MODEL.md](DATA_MODEL.md). The [API contract](API.md) defines validation, conflict responses, decimal-string money, and minor-unit `HALF_EVEN` average rounding. Each analytics response uses a consistent database snapshot. Executable implementation remains a later approved step.
 
@@ -87,7 +89,7 @@ Application services define transaction boundaries for use cases. The employee r
 - Test important Angular forms, listing/filtering interactions, and loading/error states; verify the integrated UI/API workflow.
 - Measure the realistic 10,000-record workload before making performance claims. Performance targets and integration-test environment setup remain open.
 
-These are planned checks, not executed application tests. The documentation step checks scope consistency, local links, whitespace, and secret patterns.
+Migration/reference-data/constraint checks are implemented in `FlywayMigrationIT` against disposable PostgreSQL 18.6 databases. Employee use-case, API, analytics, security, and frontend checks remain planned. Unit tests use the normal Maven test phase; database integration tests run during `verify` and require Docker.
 
 ## Future Expansion
 

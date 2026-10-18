@@ -12,7 +12,7 @@ The assessment was read in full before drafting [REQUIREMENTS.md](REQUIREMENTS.m
 | --- | --- | --- |
 | Salary basis | Gross annual base salary, excluding bonuses, benefits, taxes, and deductions. | Gives reporting a consistent meaning; revise if another salary definition is required. |
 | Salary values | Positive, finite amounts stored as `NUMERIC(19,4)` and calculated with `BigDecimal`; validate currency precision before persistence. | Reject meaningful excess precision rather than silently round; insignificant trailing zeros may be accepted. The storage limit is not an HR policy maximum. Return decimal strings; round analytics averages once using `HALF_EVEN` at currency minor units. |
-| Currency | Preserve each salary's original ISO currency code, referencing supported currency metadata with 0-4 minor units. | Employment country and salary currency are independent. Exact supported records remain to be selected and verified. |
+| Currency | Preserve each salary's original ISO currency code, referencing supported currency metadata with 0-4 minor units. | Employment country and salary currency are independent. Initial records INR/USD/GBP/EUR/JPY/KWD are implemented with verified ISO minor units. |
 | Reporting | Separate monetary results by currency; do not perform exchange-rate conversion. | Avoid comparing or adding unlike amounts. Overall headcount may span currencies. |
 | Employee record | Stable internal identity; editable unique uppercase employee number up to 32 ASCII letters/digits/hyphens/underscores, starting with a letter/digit; nonblank full name up to 200 characters; department, country, current salary/currency, version, and timestamps. | Trim employee numbers and names; preserve internal name spacing/case. Current salary shares the employee lifecycle. Timestamps/version do not provide history or auditing. |
 | Management | List, literal case-insensitive substring search, department/country/currency filters, one allowlisted sort, add, and full edit. | Zero-based pagination defaults to 25 records with a maximum of 100. Salary sorting requires a currency filter. |
@@ -31,7 +31,7 @@ Spring Security is approved for single-account session login/logout, protected r
 
 The approved backend bootstrap uses Java 21, Spring Boot 4.1.1, Spring MVC, Maven Wrapper 3.9.11, and Boot's managed JUnit Jupiter 6/Mockito test starter. JUnit 6 replaces the original JUnit 5 preference with user approval. Explicitly select Java 21 through `JAVA_HOME` because the local global Maven otherwise uses Java 25. No global tooling or shell-profile changes are needed.
 
-The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. Database, validation, and security dependencies are deferred to their approved steps. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
+The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. PostgreSQL JDBC/Flyway integration is implemented. JPA, application validation, and security dependencies are deferred to their approved steps. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
 
 ## Approved Data Model Decisions
 
@@ -41,7 +41,9 @@ Employee management owns the employee entity/repository; compensation owns monet
 
 Start with primary-key/uniqueness indexes and employee indexes on `(department_id, id)` and `(country_code, id)`. Finalize other indexes against query contracts and measurements. Do not assume B-tree indexes accelerate arbitrary name substring searches. Use a unique ID as the final sort tie-breaker.
 
-PostgreSQL's fixed-scale numeric coercion can round invalid input, so application writes and seeding must validate before persistence. Direct SQL bypassing validation may still round; no trigger-based precision machinery is planned. The database must explicitly reject `NaN` as well as non-positive salaries. The model is approved documentation; no executable migrations or database checks have run.
+PostgreSQL's fixed-scale numeric coercion can round invalid input, so application writes and seeding must validate before persistence. Direct SQL bypassing validation may still round; no trigger-based precision machinery is planned. V1 implements the schema and explicit `NaN`/non-positive salary rejection; V2 initializes eight departments, six countries, and six currencies, with lookup names limited to 100 characters. Migration/constraint tests run against isolated PostgreSQL 18.6 databases.
+
+Docker Compose supplies the persistent local development database with loopback binding. Credentials live in ignored local configuration, outside Git. Flyway owns initialization, validates completed migrations, and has clean disabled. Application startup requires database configuration and successful migration. Testcontainers databases are disposable and separate from development data; Failsafe runs integration tests during `verify`. Production database roles/hosting remain deployment decisions.
 
 ## Approved API Decisions
 
@@ -55,7 +57,7 @@ The API is an approved design contract, not an implemented or tested service. De
 
 **Incubyte clarification:** salary definition and components; required analytics and currency conversion; salary history; CSV import/export; authentication and access expectations; deployment requirements. The assessment says "AngularJS for Java"; modern Angular acceptance remains unconfirmed.
 
-**Before affected implementation:** supported country/currency records and reference display-name lengths; any additional HR business salary maximum if required; frontend/database tool versions; exact query/index plans and consistent-snapshot implementation; timestamp initialization; environment-specific deployment/security configuration; hosting constraints; and measurable performance targets. These are open implementation/product details, not extra features to add automatically. Docker CLI availability does not establish a running database, and `psql` was not on PATH during the setup review.
+**Before affected implementation:** any additional HR business salary maximum if required; frontend tool versions; exact query/index plans and consistent-snapshot implementation; application maintenance of update timestamps; environment-specific deployment/security configuration; hosting constraints; and measurable performance targets. These are open implementation/product details, not extra features to add automatically. Local PostgreSQL is provided by Compose; a native PostgreSQL installation is not required.
 
 ## Future Expansion and Trade-offs
 
@@ -71,4 +73,4 @@ Compare the response with this register, identify impacts, and present proposed 
 
 ## AI-Assisted Decision Record
 
-Keep [AI_USAGE.md](AI_USAGE.md) to one brief line per major code change; omit routine documentation, tooling, and Git details. Design decisions belong in their relevant documents. Approval of one step does not authorize later roadmap steps.
+Use [AI_USAGE.md](AI_USAGE.md) selectively: at most one brief line for a selected major code change, and skip entries for other commits. Omit routine documentation, tooling, and Git details. Design decisions belong in their relevant documents. Approval of one step does not authorize later roadmap steps.
