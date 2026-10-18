@@ -1,6 +1,6 @@
 # API Contracts and Business Rules
 
-**Status:** Approved MVP project contract, subject to Incubyte clarification. The employee-creation application service/persistence is implemented and tested. The employee, analytics, reference-data, and authentication HTTP endpoints described here are not implemented or behaviorally tested. Typed service command/result records are internal application values, not HTTP DTOs.
+**Status:** Approved MVP project contract, subject to Incubyte clarification. The employee-creation application service/persistence and authentication/session/CSRF endpoints are implemented and tested. Employee, analytics, and reference-data HTTP endpoints remain unimplemented; their paths are protected by authentication. Typed employee service command/result records are internal application values, not HTTP DTOs.
 
 ## Conventions
 
@@ -142,6 +142,8 @@ For Angular integration, use a separate readable `XSRF-TOKEN` cookie and the `X-
 The client obtains a CSRF token before login or other mutating requests and refreshes it after successful login and logout. Spring must validate tokens for state-changing requests, including login/logout. Security-filter failures use the same problem response format as controller errors. A missing/invalid CSRF token can produce `403` before controller processing; the UI must not treat every `403` as bad credentials.
 
 Single-account session access does not implement registration, password recovery, user administration, advanced RBAC, or individual audit attribution.
+
+The implementation uses external `HR_USERNAME` and raw BCrypt `HR_PASSWORD_HASH` configuration, with no default account. Malformed/missing values prevent web startup. Cost 12 is recommended; hashes must have cost at least 10. Default cookies are Secure; the explicit `local` profile allows loopback HTTP development. Spring Security's SPA CSRF support handles raw header tokens and token clearing/refresh. Unsupported login content types produce `415` after CSRF validation. HTTP Basic and request caching/HTML redirects are disabled.
 
 ## Error Contract
 

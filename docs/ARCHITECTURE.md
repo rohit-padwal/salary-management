@@ -1,6 +1,6 @@
 # Architecture and Engineering Decisions
 
-**Status:** Approved project design for the MVP. Incubyte's clarification remains pending; this is not a statement of additional assessment requirements. The backend, PostgreSQL/Flyway foundations, and validated employee-creation service/persistence are implemented; HTTP APIs, security, and UI remain planned.
+**Status:** Approved project design for the MVP. Incubyte's clarification remains pending; this is not a statement of additional assessment requirements. The backend, PostgreSQL/Flyway foundations, validated employee-creation service/persistence, and session/CSRF security are implemented. Employee/reference-data/analytics HTTP endpoints and UI remain planned.
 
 ## Context and Goals
 
@@ -20,7 +20,7 @@ The backend bootstrap uses Java 21, Spring Boot 4.1.1, Spring MVC, and Maven Wra
 
 PostgreSQL 18.6 runs locally through Docker Compose with loopback access and a persistent project volume. The backend uses the Boot Flyway starter, PostgreSQL-specific Flyway module, and JDBC driver. Testcontainers supplies isolated PostgreSQL databases for integration tests, run by Maven Failsafe during `verify`. Credentials are external to Git; application startup requires configured PostgreSQL and successful migrations.
 
-Spring Data JPA is implemented for employee persistence and immutable reference-data mappings. Jakarta Bean Validation and Spring Security remain approved choices to add with the HTTP and access-control steps. Modern Angular, TypeScript, Angular Material, Reactive Forms, and HttpClient remain the frontend direction; version selection and Angular acceptance are still pending. The [README](../README.md) documents Java selection, build, database setup, and local execution.
+Spring Data JPA is implemented for employee persistence and immutable reference-data mappings. Spring Security uses Boot's managed 7.1.1 version. Jakarta Bean Validation remains an approved choice to add with employee HTTP validation. Modern Angular, TypeScript, Angular Material, Reactive Forms, and HttpClient remain the frontend direction; version selection and Angular acceptance are still pending. The [README](../README.md) documents Java selection, build, database setup, and local execution.
 
 ## Responsibilities and Boundaries
 
@@ -72,7 +72,11 @@ Use an HTTP-only session cookie, secure over HTTPS in deployment, with `SameSite
 | Session login | Selected: conventional login/logout with server-side session management; requires correct cookie and CSRF integration. |
 | External identity provider | Additional account/service configuration beyond the current demo need. |
 
-Spring Security is justified by protecting sensitive operations and reads. This decision approves its purpose; it does not install dependencies in this step.
+Spring Security is implemented through one servlet security configuration, a small authentication controller, and security-filter Problem Details handlers. `InMemoryUserDetailsManager` holds the externally configured account; BCrypt verifies its supplied hash. Configuration rejects absent/malformed credentials without generating a fallback account. Credential properties have a redacted string representation. No account table is required for the approved single-account model.
+
+Spring Security 7.1's SPA CSRF configuration supplies the Angular cookie/header behavior without a custom token handler. The CSRF endpoint materializes the token and returns no body. Login/logout remain framework-managed. A small filter between CSRF validation and login authentication enforces the URL-encoded login content type. Request caching and HTTP Basic are disabled; all paths except the explicit public auth requests require authentication. Error dispatches may reach the framework error controller, preserving authenticated missing-route responses.
+
+Session and CSRF cookies default to Secure and `SameSite=Lax`; the session cookie is HTTP-only, uses cookie-only tracking, and expires after 30 minutes of inactivity. The `local` profile explicitly disables Secure for HTTP development. Security configuration/controllers apply only to servlet applications, so framework-free service tests and non-web persistence tests do not need HR credentials; every web application still requires them.
 
 A shared configured account provides no individual attribution. In-memory sessions support the initial single-instance application; a restart requires login again. Multiple application instances would require an explicit session strategy. Use synthetic data exclusively; this demo access model is not a complete production HR identity-management system.
 
@@ -93,7 +97,7 @@ Application services define transaction boundaries for use cases. The employee m
 - Test important Angular forms, listing/filtering interactions, and loading/error states; verify the integrated UI/API workflow.
 - Measure the realistic 10,000-record workload before making performance claims. Performance targets and integration-test environment setup remain open.
 
-Migration/reference-data/constraint checks are implemented in `FlywayMigrationIT` against disposable PostgreSQL 18.6 databases. Employee-creation checks cover committed exact values, metadata, international names, invalid input/references, normalized duplicates, and concurrent same-number creation in a real Spring application context. Unit tests cover pure input/money rules and classification of integrity failures. API, editing, analytics, security, and frontend checks remain planned. Unit tests use the normal Maven test phase; database integration tests run during `verify` and require Docker.
+Migration/reference-data/constraint checks are implemented in `FlywayMigrationIT` against disposable PostgreSQL 18.6 databases. Employee-creation checks cover committed exact values, metadata, international names, invalid input/references, normalized duplicates, and concurrent same-number creation in a real Spring application context. Unit tests cover pure input/money rules, integrity-failure classification, and invalid security configuration. `SessionSecurityIT` uses the existing test tools and Java HttpClient against real embedded servers/isolated PostgreSQL to verify the authentication contract, cookies, CSRF lifecycle, session invalidation, and filter errors. Employee HTTP, editing, analytics, and frontend checks remain planned. Unit tests use the normal Maven test phase; integration tests run during `verify` and require Docker. Secure flag tests do not verify deployed TLS or proxy configuration.
 
 ## Future Expansion
 

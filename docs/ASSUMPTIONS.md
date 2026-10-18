@@ -27,11 +27,11 @@ The user approved the [architecture proposal](ARCHITECTURE.md): a modular monoli
 
 Keep clear employee, compensation, analytics, infrastructure, and security responsibilities. Use controllers, services, repositories, DTOs, and straightforward mapping where needed within features. Analytics may use read-only database projections against the application's tables; this internal schema coupling is accepted.
 
-Spring Security is approved for single-account session login/logout, protected reads and writes, and CSRF integration with Angular. HTTP-only authentication cookies, secure deployment cookies, and an explicit same-site policy are part of the design. No identity provider, account administration, or advanced RBAC is introduced.
+Spring Security is implemented for single-account session login/logout, protected API paths, and CSRF integration with Angular. HTTP-only session cookies, Secure defaults, `SameSite=Lax`, cookie-only session tracking, and a 30-minute idle timeout are configured and tested. The `local` profile permits cookies over loopback HTTP. No identity provider, account administration, or advanced RBAC is introduced.
 
 The approved backend bootstrap uses Java 21, Spring Boot 4.1.1, Spring MVC, Maven Wrapper 3.9.11, and Boot's managed JUnit Jupiter 6/Mockito test starter. JUnit 6 replaces the original JUnit 5 preference with user approval. Explicitly select Java 21 through `JAVA_HOME` because the local global Maven otherwise uses Java 25. No global tooling or shell-profile changes are needed.
 
-The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. PostgreSQL JDBC/Flyway integration, Spring Data JPA, and framework-free employee-creation validation are implemented. Hibernate validates the schema; Open Session in View is disabled. Jakarta Bean Validation and security dependencies remain deferred to HTTP/access-control steps. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
+The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. PostgreSQL JDBC/Flyway integration, Spring Data JPA, framework-free employee-creation validation, and Spring Security 7.1.1 are implemented. Hibernate validates the schema; Open Session in View is disabled. Jakarta Bean Validation remains deferred to employee HTTP validation. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
 
 ## Approved Data Model Decisions
 
@@ -53,7 +53,9 @@ The user approved [API.md](API.md): JSON REST under `/api/v1`; integer strings f
 
 Use RFC 9457 Problem Details, including security-filter failures. Duplicate employee numbers and stale updates have distinct `409` codes. Login/session/logout and CSRF endpoints use API responses rather than HTML redirects. Login is URL-encoded and CSRF-protected; refresh the separate CSRF token after login/logout. Preserve stale forms and offer reload rather than silently retrying against the newest record.
 
-The API is an approved design contract, not an implemented or tested service. Detailed runtime configuration and query implementation remain later steps.
+Authentication/session/CSRF endpoints and security-filter errors are implemented and tested over HTTP. The account comes from external `HR_USERNAME` and raw BCrypt `HR_PASSWORD_HASH`; cost 12 is recommended and at least 10 is required. No credentials are generated or defaulted. Web startup fails on missing/malformed account settings. Password and hash values are not returned or explicitly logged. The shared account remains a demo access mechanism rather than individual identity management. Local setup is documented in the README; production HTTPS/proxy settings remain deployment work.
+
+Employee/reference-data/analytics HTTP endpoints remain approved contracts awaiting implementation. An internal employee-creation service exists, but no employee controller exposes it yet. Query implementation and production runtime verification remain later steps.
 
 ## Questions Awaiting Resolution
 

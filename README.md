@@ -4,7 +4,7 @@ Employee salary management for an HR Manager overseeing 10,000 employees across 
 
 ## Current Status
 
-The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. A transactional employee-creation service validates identity, reference data, and currency-specific salary precision, then persists the employee. Unit and isolated PostgreSQL integration tests cover this behavior. HTTP endpoints, editing/listing, analytics, authentication, employee seeding, and the Angular UI remain planned.
+The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. A transactional employee-creation service validates and persists employee data. Session authentication and Angular-compatible CSRF protection are implemented and tested over HTTP. Employee HTTP endpoints, editing/listing, analytics, employee seeding, and the Angular UI remain planned.
 
 ## Backend Toolchain
 
@@ -14,10 +14,11 @@ The backend connects to PostgreSQL through JPA and applies its schema/reference 
 - PostgreSQL 18.6, supplied locally through Docker Compose
 - Flyway for versioned migrations
 - Spring Data JPA for persistence, with Hibernate schema validation
+- Spring Security for single-account session authentication and CSRF protection
 - Spring Boot's managed test starter, including JUnit Jupiter 6 and Mockito
 - Testcontainers for isolated PostgreSQL integration tests
 
-Business validation currently uses independently testable Java rules. Jakarta Bean Validation and Spring Security dependencies will accompany the HTTP and access-control steps.
+Business validation currently uses independently testable Java rules. Jakarta Bean Validation will accompany employee HTTP input validation.
 
 ## Build
 
@@ -41,7 +42,7 @@ cd backend
 
 Confirm that the wrapper reports Maven 3.9.11 and Java 21. On Windows, use `mvnw.cmd` instead of `./mvnw`.
 
-`./mvnw test` runs fast validation and service error-classification tests without Docker. `./mvnw verify` also runs the database integration tests through Maven Failsafe. Those tests require Docker but do not require the development database or its credentials.
+`./mvnw test` runs validation, service error-classification, and security-configuration tests without Docker. `./mvnw verify` also runs database and HTTP integration tests through Maven Failsafe. Those tests require Docker but do not require the development database or its credentials. Test credentials are synthetic and do not configure a usable application account.
 
 ## Configure the Local Database
 
@@ -65,6 +66,25 @@ docker compose ps
 
 The database binds to loopback and stores data in a named volume at the PostgreSQL 18 image's supported volume location. Existing data is preserved across container restarts. Changing `.env` does not automatically change credentials in an existing database volume.
 
+## Configure HR Access
+
+Web startup requires an explicitly configured HR username and raw BCrypt password hash. There are no default credentials or generated application passwords. Add these shell-compatible assignments to your private root `.env`:
+
+```sh
+HR_USERNAME=hr-manager
+HR_PASSWORD_HASH='PASTE_YOUR_RAW_BCRYPT_HASH_HERE'
+```
+
+Replace the hash placeholder before starting the application. Keep the single quotes: BCrypt hashes contain dollar signs. The application accepts BCrypt hashes with cost at least 10; use cost 12 for local setup. The plaintext password is used only when signing in and must not be stored in `.env`.
+
+If `htpasswd` is available (as on this development Mac), generate a hash with an interactive password prompt:
+
+```sh
+htpasswd -nBC 12 hr-manager
+```
+
+Copy only the raw `$2y$12$...` hash after the `hr-manager:` prefix into `HR_PASSWORD_HASH`. The command prints a hash without creating a password file. See [Apache's htpasswd documentation](https://httpd.apache.org/docs/2.4/programs/htpasswd.html). On other platforms, a local BCrypt tool or Spring Security's `BCryptPasswordEncoder(12)` can produce the same raw format; `$2a$`, `$2b$`, and `$2y$` are accepted. A `{bcrypt}` prefix is not used by this configuration.
+
 ## Run the Application
 
 After building and starting the database, run from the repository root on macOS/Linux:
@@ -73,12 +93,23 @@ After building and starting the database, run from the repository root on macOS/
 set -a
 . ./.env
 set +a
-"$JAVA_HOME/bin/java" -jar backend/target/salary-management-0.0.1-SNAPSHOT.jar --server.address=127.0.0.1
+"$JAVA_HOME/bin/java" -jar backend/target/salary-management-0.0.1-SNAPSHOT.jar --spring.profiles.active=local --server.address=127.0.0.1
 ```
 
 On Windows, set the same environment variables in PowerShell before running the JAR with your Java 21 executable.
 
-The server starts at `http://127.0.0.1:8080`. Flyway applies pending migrations and validates completed migration checksums before startup succeeds. Missing database configuration, connection failures, or migration errors prevent a successful start. Business routes are not implemented, so `/api/v1/employees` still returns `404`.
+The server starts at `http://127.0.0.1:8080`. Flyway applies pending migrations and validates completed migration checksums before startup succeeds. Missing/invalid HR configuration, missing database configuration, connection failures, or migration errors prevent a successful start.
+
+The `local` profile explicitly allows cookies over loopback HTTP. Without it, session and CSRF cookies are Secure and require HTTPS in the browser. Both use `SameSite=Lax`; the session cookie is HTTP-only. Sessions expire after 30 minutes of inactivity and are lost on application restart. Production HTTPS and proxy configuration remain deployment work; do not activate `local` there.
+
+Authentication endpoints are available under `/api/v1/auth`. The browser/client sequence is:
+
+1. `GET /csrf` to obtain the readable `XSRF-TOKEN` cookie.
+2. `POST /login` using URL-encoded `username` and `password`, the cookie, and an `X-XSRF-TOKEN` header containing its value. Success is `204`; invalid credentials produce a generic `401`.
+3. Refresh the token with `GET /csrf` after login. `GET /session` returns only the authenticated username.
+4. `POST /logout` with the current CSRF cookie/header to invalidate the session, then refresh the CSRF token before another login.
+
+Missing/invalid CSRF tokens return `403`, including for login/logout. Unsupported login content types return `415` after CSRF validation. Security failures use `application/problem+json`, without HTML redirects or HTTP Basic challenges. API reads require authentication; employee routes still have no controller, so an anonymous `GET /api/v1/employees` returns `401`, and an authenticated request reaches the unimplemented route (`404`).
 
 Stop the application with Ctrl+C. Stop the development database with `docker compose stop db`; its named volume is retained.
 
@@ -88,7 +119,9 @@ The migration suite checks fresh setup, repeat migration/validation, reference d
 
 Employee-creation unit tests cover normalization, international names, positive plain-decimal salaries, storage boundaries, currency precision, and precise conflict classification. Creation integration tests start the real Spring application against a separate disposable PostgreSQL database, check committed values through JDBC, and verify invalid requests leave no records. They also verify normalized duplicates and two concurrent same-number requests. Creation tests clear only their own disposable database between cases and close the application before stopping its container.
 
-The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Editing/stale-form behavior, listing, analytics, and HTTP/security tests remain future work. There is no HTTP entry point to the creation service yet; authentication will precede exposure of employee endpoints.
+Security unit tests reject missing/plaintext/malformed account configuration and verify web startup fails without an explicit account. HTTP tests use isolated PostgreSQL and a real embedded server to exercise cookies, login/session/logout, protected reads/mutations, invalid credentials, CSRF rotation and failures, session invalidation/replay, content types, and JSON errors. Secure cookie attributes are checked separately from local HTTP behavior; the tests do not establish production TLS/proxy readiness.
+
+The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Editing/stale-form behavior, listing, analytics, employee HTTP behavior, and the frontend remain future work. There is no HTTP entry point to the creation service yet.
 
 Flyway owns schema changes. Add new versioned migration files for changes after a migration has been committed/applied; do not rewrite completed migrations. Hibernate validates the schema at startup and does not generate it. Separate `schema.sql`/`data.sql` initialization and Open Session in View are disabled.
 
