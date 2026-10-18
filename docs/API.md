@@ -1,6 +1,6 @@
 # API Contracts and Business Rules
 
-**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`) and authentication/session/CSRF endpoints are implemented and tested. Employee retrieval/listing/editing, analytics, and reference-data HTTP endpoints remain unimplemented; their paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
+**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`), retrieval (`GET /api/v1/employees/{id}`), and authentication/session/CSRF endpoints are implemented and tested. Employee listing/editing, analytics, and reference-data HTTP endpoints remain unimplemented; their paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
 
 ## Conventions
 
@@ -25,7 +25,9 @@ Use JSON REST endpoints under `/api/v1`, with explicit request/response DTOs. Pa
 
 There is no employee deletion, partial-update, or separate salary-update endpoint in the MVP. `PUT` updates an existing employee; a missing employee returns `404` rather than creating a record.
 
-Only `POST /api/v1/employees` is currently implemented in this table. Its `Location` identifies the created record; retrieval will follow in a later step. Until listing exists, an authenticated `GET /api/v1/employees` returns `405` with an `Allow` header.
+Creation and retrieval by ID are currently implemented in this table. The creation `Location` can be followed to retrieve the record. Until listing exists, an authenticated `GET /api/v1/employees` returns `405` with an `Allow` header.
+
+Retrieval requires authentication but no CSRF header. Parse path IDs with the same positive-`Long` helper used for creation's department ID: ASCII digits only, no signs/whitespace/decimal points/exponents, and no overflow. Leading zeros are accepted. Invalid values return `400 VALIDATION_ERROR` with field `id`; a valid missing ID returns `404 EMPLOYEE_NOT_FOUND`. Authentication is checked before parsing/lookup. A successful read returns the same response representation without changing salary, version, or timestamps.
 
 ### Requests and Employee Response
 
@@ -179,7 +181,7 @@ Illustrative validation response:
 | `401` | Missing/expired authentication or invalid login: `AUTHENTICATION_REQUIRED`, `INVALID_CREDENTIALS`. |
 | `403` | Invalid CSRF token or denied access: `CSRF_INVALID`, `ACCESS_DENIED`. |
 | `404` | Employee resource not found: `EMPLOYEE_NOT_FOUND`. |
-| `404` | Unmapped HTTP resource: `RESOURCE_NOT_FOUND`; distinct from the future employee lookup's business error. |
+| `404` | Unmapped HTTP resource: `RESOURCE_NOT_FOUND`; distinct from employee lookup's business error. |
 | `405` | Unsupported method on a mapped resource: `METHOD_NOT_ALLOWED`, retaining the `Allow` header. |
 | `406` | Unsupported response media type: `NOT_ACCEPTABLE`. |
 | `409` | Duplicate employee number or stale update: `EMPLOYEE_NUMBER_CONFLICT`, `STALE_EMPLOYEE`. |

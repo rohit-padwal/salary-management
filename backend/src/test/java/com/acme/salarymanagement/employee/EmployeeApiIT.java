@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class EmployeeCreationApiIT {
+class EmployeeApiIT {
 
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6");
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -254,6 +254,61 @@ class EmployeeCreationApiIT {
         assertEquals(0L, countEmployees());
     }
 
+    @ParameterizedTest
+    @CsvSource({"USD,125000.1200", "JPY,1200.0000", "KWD,12.3450"})
+    void followsCreatedLocationWithoutChangingEmployeeData(String currency, String amount) throws Exception {
+        HttpResponse<String> created = post(validRequest().put("fullName", "  Zoë  李  ")
+                .put("currencyCode", currency).put("salaryAmount", amount).toString());
+        assertEquals(201, created.statusCode());
+        String location = created.headers().firstValue("Location").orElseThrow();
+        long id = Long.parseLong(JSON.readTree(created.body()).path("id").asString());
+        var before = jdbc.queryForMap("SELECT * FROM employees WHERE id = ?", id);
+        // Reads need the authenticated session, but no CSRF cookie/header.
+        cookies.getCookieStore().getCookies().stream().filter(cookie -> cookie.getName().equals("XSRF-TOKEN"))
+                .toList().forEach(cookie -> cookies.getCookieStore().remove(endpoint, cookie));
+        HttpResponse<String> fetched = get(endpoint.resolve(location));
+        assertEquals(200, fetched.statusCode());
+        assertTrue(fetched.headers().firstValue("Content-Type").orElse("").startsWith("application/json"));
+        assertTrue(fetched.headers().firstValue("Cache-Control").orElse("").contains("no-store"));
+        assertEquals(JSON.readTree(created.body()), JSON.readTree(fetched.body()));
+        assertEquals(200, get(endpoint.resolve(location)).statusCode());
+        assertEquals(before, jdbc.queryForMap("SELECT * FROM employees WHERE id = ?", id));
+        assertEquals(1L, countEmployees());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "-1", "+1", "1.0", "1e0", "abc", "9223372036854775808", "%201", "1%20"})
+    void rejectsInvalidEmployeePathIds(String id) throws Exception {
+        URI uri = URI.create(endpoint + "/" + id);
+        JsonNode problem = assertProblem(get(uri), 400, "VALIDATION_ERROR", uri.getRawPath());
+        assertEquals("id", problem.path("errors").get(0).path("field").asString());
+        assertEquals(0L, countEmployees());
+    }
+
+    @Test
+    void reportsMissingEmployeeSeparatelyFromUnmappedResources() throws Exception {
+        URI uri = URI.create(endpoint + "/9223372036854775807");
+        HttpResponse<String> response = get(URI.create(uri + "?q=private-search"));
+        assertProblem(response, 404, "EMPLOYEE_NOT_FOUND", uri.getPath());
+        assertFalse(response.body().contains("EmployeeNotFoundException"));
+        assertFalse(response.body().contains("private-search"));
+        assertEquals(0L, countEmployees());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "abc", "9223372036854775807"})
+    void requiresAuthenticationBeforeLookupOrIdValidation(String id) throws Exception {
+        cookies.getCookieStore().removeAll();
+        URI uri = URI.create(endpoint + "/" + id);
+        assertProblem(get(uri), 401, "AUTHENTICATION_REQUIRED", uri.getPath());
+        assertEquals(0L, countEmployees());
+    }
+
+    private HttpResponse<String> get(URI uri) throws Exception {
+        return client.send(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10)).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+    }
+
     private ObjectNode validRequest() {
         return JSON.createObjectNode().put("employeeNumber", "EMP-1").put("fullName", "Asha Rao")
                 .put("departmentId", Long.toString(departmentId)).put("countryCode", "IN")
@@ -284,12 +339,16 @@ class EmployeeCreationApiIT {
     }
 
     private JsonNode assertProblem(HttpResponse<String> response, int status, String code) {
+        return assertProblem(response, status, code, "/api/v1/employees");
+    }
+
+    private JsonNode assertProblem(HttpResponse<String> response, int status, String code, String path) {
         assertEquals(status, response.statusCode());
         assertTrue(response.headers().firstValue("Content-Type").orElse("").startsWith("application/problem+json"));
         JsonNode body = JSON.readTree(response.body());
         assertEquals(status, body.path("status").asInt());
         assertEquals(code, body.path("code").asString());
-        assertEquals("/api/v1/employees", body.path("instance").asString());
+        assertEquals(path, body.path("instance").asString());
         assertFalse(body.has("trace"));
         assertFalse(body.has("exception"));
         return body;

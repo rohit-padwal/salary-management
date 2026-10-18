@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Locale;
 
 import com.acme.salarymanagement.employee.EmployeeNumberConflictException;
+import com.acme.salarymanagement.employee.EmployeeNotFoundException;
 import com.acme.salarymanagement.validation.InputValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +40,12 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     ResponseEntity<Object> duplicateEmployee(EmployeeNumberConflictException failure, WebRequest request) {
         return response(problem(409, "EMPLOYEE_NUMBER_CONFLICT", "Employee number conflict",
                 "Employee number is already in use.", request), HttpHeaders.EMPTY);
+    }
+
+    @ExceptionHandler(EmployeeNotFoundException.class)
+    ResponseEntity<Object> employeeNotFound(EmployeeNotFoundException failure, WebRequest request) {
+        return response(problem(404, "EMPLOYEE_NOT_FOUND", "Employee not found",
+                "Employee was not found.", request), HttpHeaders.EMPTY);
     }
 
     @ExceptionHandler(Exception.class)

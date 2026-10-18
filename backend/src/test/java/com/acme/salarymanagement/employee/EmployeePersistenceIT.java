@@ -9,6 +9,8 @@ import java.util.concurrent.TimeUnit;
 
 import com.acme.salarymanagement.SalaryManagementApplication;
 import com.acme.salarymanagement.validation.InputValidationException;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class EmployeeCreationIT {
+class EmployeePersistenceIT {
 
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18.6");
     private static ConfigurableApplicationContext context;
@@ -168,6 +170,32 @@ class EmployeeCreationIT {
             assertEquals(1L, outcomes.stream().filter("conflict"::equals).count());
         }
         assertEquals(1L, countEmployees());
+    }
+
+    @Test
+    void retrievesEmployeeAndAllLookupLabelsWithOneSelectAndNoWrites() {
+        EmployeeResult created = service.create(command("EMP-1", "Zoë  李", "12.3450", "KWD"));
+        var statistics = context.getBean(EntityManagerFactory.class).unwrap(SessionFactory.class).getStatistics();
+        boolean originallyEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+        try {
+            EmployeeResult fetched = context.getBean(EmployeeQueryService.class).getById(created.id());
+            assertEquals(created, fetched);
+            assertEquals(1, statistics.getPrepareStatementCount());
+            assertEquals(0, statistics.getEntityInsertCount());
+            assertEquals(0, statistics.getEntityUpdateCount());
+            assertEquals(0, statistics.getEntityDeleteCount());
+        } finally {
+            statistics.setStatisticsEnabled(originallyEnabled);
+        }
+    }
+
+    @Test
+    void missingEmployeeProducesBusinessNotFoundWithoutWriting() {
+        assertThrows(EmployeeNotFoundException.class,
+                () -> context.getBean(EmployeeQueryService.class).getById(Long.MAX_VALUE));
+        assertEquals(0L, countEmployees());
     }
 
     private CreateEmployeeCommand command(String number, String name, String salary, String currency) {

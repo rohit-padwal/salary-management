@@ -1,6 +1,6 @@
 # Employee Salary Data Model
 
-**Status:** Approved project design for the MVP, subject to Incubyte clarification. The schema/reference records, JPA mappings, and validated employee creation through HTTP/service/persistence are implemented and verified against PostgreSQL 18.6. Retrieval, editing, listing, and analytics remain future steps.
+**Status:** Approved project design for the MVP, subject to Incubyte clarification. The schema/reference records, JPA mappings, and employee creation/retrieval through HTTP/service/persistence are implemented and verified against PostgreSQL 18.6. Editing, listing, and analytics remain future steps.
 
 ## Context and Scope
 
@@ -103,11 +103,11 @@ Analytics remains database-side aggregation. Do not add materialized summaries, 
 
 The initial migration test was run before the SQL existed and failed because zero migrations were found. The implemented schema/reference migrations then passed the full integration suite. PostgreSQL reports `23001` for `ON DELETE RESTRICT`; the delete-protection assertions use that documented state, while invalid references use `23503`.
 
-`EmployeeCreationIT` boots the application against its own disposable database, verifying Flyway/JPA compatibility, committed creation, currency-specific precision before persistence, exact salary round trips, server metadata, international names, unknown references, invalid requests leaving no records, and sequential/concurrent duplicate conflicts. Unit tests cover input normalization, Unicode character limits, salary rules, and classification of integrity failures. No applied migration was changed to add JPA.
+`EmployeePersistenceIT` boots the application against its own disposable database, verifying Flyway/JPA compatibility, committed creation, currency-specific precision before persistence, exact salary round trips, server metadata, international names, unknown references, invalid requests leaving no records, and sequential/concurrent duplicate conflicts. It also verifies missing-employee lookup and retrieval of the employee/lookup labels in one prepared query with zero entity writes. Unit tests cover input normalization, Unicode character limits, salary rules, ID parsing, and classification of integrity failures. No applied migration was changed to add JPA or retrieval.
 
-`EmployeeCreationApiIT` additionally verifies committed creation and duplicate/concurrent conflicts through the authenticated, CSRF-protected endpoint, with exact string serialization and validation/no-write behavior. HTTP DTOs add no schema changes.
+`EmployeeApiIT` additionally verifies committed creation and duplicate/concurrent conflicts through the authenticated, CSRF-protected endpoint, with exact string serialization and validation/no-write behavior. It follows resource locations across currencies, compares unchanged database records after reads, and checks invalid IDs, missing employees, and authentication before lookup. HTTP DTOs and retrieval add no schema changes.
 
-Retrieval, stale browser edits, pagination, and analytics remain application-feature tests for later steps. Creation coverage does not imply those workflows are implemented.
+Stale browser edits, pagination, and analytics remain application-feature tests for later steps. Creation/retrieval coverage does not imply those workflows are implemented.
 
 ## Future Expansion
 

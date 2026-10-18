@@ -57,7 +57,9 @@ Authentication/session/CSRF endpoints and security-filter errors are implemented
 
 Employee creation is implemented through HTTP. Strict JSON rejects non-string values for its fields, unknown/server-managed fields, and trailing tokens. Controller validation/error handling returns the approved field errors, generic malformed-request errors, and duplicate conflicts; unexpected responses omit exception details. Required-field errors are ordered by field name. There are no new migrations or changes to monetary rules for this HTTP step.
 
-Employee retrieval/listing/editing and reference-data/analytics HTTP endpoints remain approved contracts awaiting implementation. Creation returns its resource `Location`, but retrieval is a later step. Query implementation and production runtime verification remain later steps.
+Employee retrieval by ID is implemented through an authenticated GET with no CSRF header requirement. It reuses the employee response DTO and maps results inside a read-only query service transaction. Lookup labels are fetched with the employee through an entity graph. A valid missing ID returns `404 EMPLOYEE_NOT_FOUND`; malformed/nonpositive/out-of-range IDs return field validation errors. Shared positive-ID parsing accepts ASCII digits/leading zeros and rejects signs or surrounding whitespace. Reads preserve salary, version, and timestamps.
+
+Employee listing/editing and reference-data/analytics HTTP endpoints remain approved contracts awaiting implementation. Listing/analytics queries and production runtime verification remain later steps.
 
 ## Questions Awaiting Resolution
 
