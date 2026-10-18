@@ -29,6 +29,7 @@ public final class SalaryRules {
         if (value.signum() <= 0) {
             throw invalid("MUST_BE_POSITIVE", "Salary must be greater than zero.");
         }
+        // Validate before PostgreSQL can silently round input to the NUMERIC column scale.
         if (value.stripTrailingZeros().scale() > minorUnits) {
             throw invalid("EXCESS_PRECISION", "Salary has more fractional digits than the selected currency allows.");
         }

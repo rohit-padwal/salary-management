@@ -31,7 +31,9 @@ Spring Security is implemented for single-account session login/logout, protecte
 
 The approved backend bootstrap uses Java 21, Spring Boot 4.1.1, Spring MVC, Maven Wrapper 3.9.11, and Boot's managed JUnit Jupiter 6/Mockito test starter. JUnit 6 replaces the original JUnit 5 preference with user approval. Explicitly select Java 21 through `JAVA_HOME` because the local global Maven otherwise uses Java 25. No global tooling or shell-profile changes are needed.
 
-The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. PostgreSQL JDBC/Flyway integration, Spring Data JPA, framework-free employee validation, and Spring Security 7.1.1 are implemented. Hibernate validates the schema; Open Session in View is disabled. Jakarta Bean Validation checks required fields on employee creation/editing HTTP endpoints. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
+The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. PostgreSQL JDBC/Flyway integration, Spring Data JPA, framework-free employee validation, and Spring Security 7.1.1 are implemented. Hibernate validates the schema; Open Session in View is disabled. Jakarta Bean Validation checks required fields on employee creation/editing HTTP endpoints. The user explicitly requires the latest stable modern Angular rather than AngularJS. The verified baseline is Angular/CLI/Material 22.2.3 (2026-10-18); [FRONTEND.md](FRONTEND.md) records tooling and conventions. Incubyte confirmation remains unreceived, distinct from this approved project choice. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
+
+The user requested feature-local responsibility folders and selective explanatory comments before frontend work. Source and test packages now distinguish controllers, DTOs, application models, services, entities, repositories, exceptions, validation, and seeding where applicable. Cross-package types/methods have public access only where needed; local implementation helpers stay package-private. No dependency, database, API, or business-rule change is intended.
 
 ## Approved Data Model Decisions
 
@@ -79,9 +81,9 @@ The explicit seed command is implemented: `--seed-employees` runs without an HTT
 
 ## Questions Awaiting Resolution
 
-**Incubyte clarification:** salary definition and components; required analytics and currency conversion; salary history; CSV import/export; authentication and access expectations; deployment requirements. The assessment says "AngularJS for Java"; modern Angular acceptance remains unconfirmed.
+**Incubyte clarification:** salary definition and components; required analytics and currency conversion; salary history; CSV import/export; authentication and access expectations; deployment requirements. The assessment says "AngularJS for Java"; Incubyte confirmation of the user-selected modern Angular approach remains unreceived.
 
-**Before affected implementation:** any additional HR business salary maximum if required; frontend tool versions; query/index workload measurements; environment-specific deployment/security configuration; hosting constraints; and measurable performance targets. These are open implementation/product details, not extra features to add automatically. Local PostgreSQL is provided by Compose; a native PostgreSQL installation is not required.
+**Before affected implementation:** any additional HR business salary maximum if required; frontend tool installation and exact lockfile resolution against the verified stable baseline; query/index workload measurements; environment-specific deployment/security configuration; hosting constraints; and measurable performance targets. These are open implementation/product details, not extra features to add automatically. Local PostgreSQL is provided by Compose; a native PostgreSQL installation is not required.
 
 ## Future Expansion and Trade-offs
 

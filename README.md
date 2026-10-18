@@ -6,6 +6,25 @@ Employee salary management for an HR Manager overseeing 10,000 employees across 
 
 The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup and server-side paginated employee search with department/country/currency filters and allowlisted sorting are also available. Compensation analytics are available through an authenticated JSON endpoint. An explicit seed command loads 10,000 deterministic synthetic employees. The Angular UI remains planned.
 
+## Project Organization
+
+Backend packages remain grouped by feature under `backend/src/main/java/com/acme/salarymanagement/`:
+
+| Feature | Responsibility folders |
+| --- | --- |
+| `employee` | `controller`, `dto`, `entity`, `exception`, `model`, `repository`, `seed`, `service`, `validation` |
+| `referencedata` | `controller`, `dto`, `entity`, `model`, `repository`, `service` |
+| `analytics` | `controller`, `dto`, `model`, `repository`, `service` |
+| `api` | `config`, `exception`, `validation` |
+| `security` | `config`, `controller`, `exception`, `filter` |
+| `infrastructure` | `persistence` |
+
+`compensation/SalaryRules.java` and shared `validation/` remain small focused units. Tests mirror feature/responsibility packages under `backend/src/test/java`. Migrations remain in `backend/src/main/resources/db/migration`; operational scripts remain in `scripts/`; design and setup notes remain in `docs/`.
+
+## Frontend Baseline
+
+The user has selected the latest stable modern Angular. Angular, CLI, build tooling, and Material **22.2.3** are the verified baseline on 2026-10-18, with compatible Node 24 LTS and TypeScript 6.0.x. No frontend workspace or dependencies have been created yet. See [frontend tooling and conventions](docs/FRONTEND.md) before initialization; recheck stable versions at that step and commit exact dependency resolution in the lockfile.
+
 ## Backend Toolchain
 
 - Java 21

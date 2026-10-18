@@ -2,7 +2,7 @@ package com.acme.salarymanagement;
 
 import java.util.Arrays;
 
-import com.acme.salarymanagement.employee.EmployeeSeedService;
+import com.acme.salarymanagement.employee.seed.EmployeeSeedService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
