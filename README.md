@@ -4,7 +4,7 @@ Employee salary management for an HR Manager overseeing 10,000 employees across 
 
 ## Current Status
 
-The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup is also available. Listing, analytics endpoints, employee seeding, and the Angular UI remain planned.
+The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup and server-side paginated employee listing are also available. Search, filtering, selectable sorting, analytics endpoints, employee seeding, and the Angular UI remain planned.
 
 ## Backend Toolchain
 
@@ -110,7 +110,7 @@ Authentication endpoints are available under `/api/v1/auth`. The browser/client 
 3. Refresh the token with `GET /csrf` after login. `GET /session` returns only the authenticated username.
 4. `POST /logout` with the current CSRF cookie/header to invalidate the session, then refresh the CSRF token before another login.
 
-Missing/invalid CSRF tokens return `403`, including for login/logout. Unsupported login content types return `415` after CSRF validation. Security failures use `application/problem+json`, without HTML redirects or HTTP Basic challenges. API reads require authentication. Employee creation and lookup by ID are implemented; authenticated `GET /api/v1/employees` currently returns `405` because listing is not implemented.
+Missing/invalid CSRF tokens return `403`, including for login/logout. Unsupported login content types return `415` after CSRF validation. Security failures use `application/problem+json`, without HTML redirects or HTTP Basic challenges. API reads require authentication. Employee creation, lookup/editing by ID, and paginated listing are implemented. Read requests require a session but no CSRF token.
 
 Stop the application with Ctrl+C. Stop the development database with `docker compose stop db`; its named volume is retained.
 
@@ -142,6 +142,16 @@ After login and CSRF refresh, send `POST /api/v1/employees` with `Content-Type: 
 Choose a supported department ID from `/api/v1/reference-data`; the example department must exist in your database. Success returns `201`, a normalized employee response, and `Location: /api/v1/employees/{id}`. IDs/versions and salaries are JSON strings; timestamps are UTC strings. Salary is formatted to its currency's minor units. The response contains the six editable fields plus ID, version, timestamps, department name, and country name. Follow the returned `Location` to retrieve the record.
 
 All six fields are required strings. Unknown/server-managed fields and non-string values are rejected. Invalid input/reference values return `400`; duplicate normalized numbers return `409 EMPLOYEE_NUMBER_CONFLICT`; unsupported request content types return `415`. Errors use Problem Details without rejected values or database details. Failed validation does not write an employee. Concurrent duplicate requests result in one creation and one conflict.
+
+## List Employees
+
+Send authenticated `GET /api/v1/employees?page=0&size=25`. Both parameters are optional: `page` defaults to `0` and `size` to `25`. The response contains `items` using the existing employee representation, plus integer `page`, `size`, `totalElements`, and `totalPages`.
+
+Results are ordered by employee number ascending, then ID ascending, and paginated in PostgreSQL. Page numbers range from `0` through `2147483647`; sizes range from `1` through `100`. Values must contain ASCII digits only; leading zeros are accepted. Empty values, signs, whitespace, decimals, exponents, overflow, and repeated parameters return `400 VALIDATION_ERROR`.
+
+An empty database returns empty `items` with zero totals. Pages beyond the available results return empty `items` with the real totals. GET needs no CSRF cookie/header; missing authentication returns `401` before parameter validation. Search, filters, selectable sorting, and other unsupported parameters currently return `400`, rather than being silently ignored. They remain planned increments.
+
+The service counts first, fetching only an in-range page and its lookup labels. Tests verify two selects for populated pages and one for out-of-range pages, with no per-employee lookup queries or writes. Offset pagination does not provide a stable snapshot while records change; totals and page rows can also observe separate commits under the default transaction isolation. Larger-scale performance still requires measurement.
 
 ## Retrieve an Employee
 
@@ -177,13 +187,13 @@ Employee-creation unit tests cover normalization, international names, positive 
 
 Security unit tests reject missing/plaintext/malformed account configuration and verify web startup fails without an explicit account. HTTP tests use isolated PostgreSQL and a real embedded server to exercise cookies, login/session/logout, protected reads/mutations, invalid credentials, CSRF rotation and failures, session invalidation/replay, content types, and JSON errors. Secure cookie attributes are checked separately from local HTTP behavior; the tests do not establish production TLS/proxy readiness.
 
-`EmployeeApiIT` exercises authenticated creation, retrieval, and editing, exact response types/formatting, required fields, strict JSON types/fields, malformed bodies, invalid references and salaries, Unicode limits, duplicates/concurrency, unsupported media types, and access enforcement. It verifies full replacement, metadata/version behavior, unchanged submissions, rollback, and stale-form conflicts. `EmployeePersistenceIT` checks single-query retrieval and coordinates concurrent transactions with barriers/latches to verify competing edits and commit-time validation of an unchanged submission. Focused unit/MVC tests verify ID formatting/parsing, safe errors, and explicit/JPA/Spring optimistic failures mapping to `409`.
+`EmployeeApiIT` exercises authenticated creation, retrieval, and editing, exact response types/formatting, required fields, strict JSON types/fields, malformed bodies, invalid references and salaries, Unicode limits, duplicates/concurrency, unsupported media types, and access enforcement. It verifies full replacement, metadata/version behavior, unchanged submissions, rollback, and stale-form conflicts. `EmployeePersistenceIT` checks single-query retrieval and coordinates concurrent transactions with barriers/latches to verify competing edits and commit-time validation of an unchanged submission. Listing tests verify defaults, exact page envelopes, page traversal and totals, empty/oversized pages, strict query validation, and session/CSRF behavior. Persistence tests verify that only the requested employees are loaded, labels need no additional queries, and reads preserve stored data. Focused unit/MVC tests verify ID formatting/parsing, pagination bounds for non-HTTP callers, safe errors, and explicit/JPA/Spring optimistic failures mapping to `409`.
 
 Creation and effective updates obtain latest-change metadata from PostgreSQL's transaction clock. JPA manages the version; the client-supplied version is only a precondition. Unchanged submissions perform no employee write. Tests use disposable databases and do not reset development data.
 
 `ReferenceDataApiIT` verifies the real HTTP response against PostgreSQL: complete ordered catalogs, exact JSON types, large string IDs, Unicode names, current database metadata, empty catalogs, authentication, GET without CSRF, unsupported media types, and rejection of catalog writes. It resets only its own disposable database between cases.
 
-The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Listing, analytics endpoints, and the frontend remain future work.
+The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Search, filtering, selectable sorting, analytics endpoints, and the frontend remain future work.
 
 Flyway owns schema changes. Add new versioned migration files for changes after a migration has been committed/applied; do not rewrite completed migrations. Hibernate validates the schema at startup and does not generate it. Separate `schema.sql`/`data.sql` initialization and Open Session in View are disabled.
 

@@ -1,6 +1,6 @@
 # API Contracts and Business Rules
 
-**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`), retrieval/editing (`GET`/`PUT /api/v1/employees/{id}`), reference-data lookup (`GET /api/v1/reference-data`), and authentication/session/CSRF endpoints are implemented and tested. Employee listing and analytics endpoints remain unimplemented; their paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
+**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`), retrieval/editing (`GET`/`PUT /api/v1/employees/{id}`), reference-data lookup (`GET /api/v1/reference-data`), and authentication/session/CSRF endpoints are implemented and tested. Basic employee pagination is implemented; search, filtering, selectable sorting, and analytics remain unimplemented. Analytics paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
 
 ## Conventions
 
@@ -25,7 +25,7 @@ Use JSON REST endpoints under `/api/v1`, with explicit request/response DTOs. Pa
 
 There is no employee deletion, partial-update, or separate salary-update endpoint in the MVP. `PUT` updates an existing employee; a missing employee returns `404` rather than creating a record.
 
-Creation, retrieval, full editing by ID, and reference-data lookup are currently implemented in this table. The creation `Location` can be followed to retrieve the record. Until listing exists, an authenticated `GET /api/v1/employees` returns `405` with an `Allow` header.
+Creation, retrieval, full editing by ID, and reference-data lookup are currently implemented in this table. Basic paginated listing is also implemented. The creation `Location` can be followed to retrieve the record. Search/filter/selectable-sort parts of the listing contract remain future work, as detailed below.
 
 Retrieval requires authentication but no CSRF header. Parse path IDs with the same positive-`Long` helper used for creation's department ID: ASCII digits only, no signs/whitespace/decimal points/exponents, and no overflow. Leading zeros are accepted. Invalid values return `400 VALIDATION_ERROR` with field `id`; a valid missing ID returns `404 EMPLOYEE_NOT_FOUND`. Authentication is checked before parsing/lookup. A successful read returns the same response representation without changing salary, version, or timestamps.
 
@@ -81,11 +81,21 @@ An effective update returns `200` with a new persisted version/update timestamp,
 
 ## Listing Contract
 
-Example: `/api/v1/employees?page=0&size=25&q=asha&countryCode=IN&sort=fullName,asc`.
+### Implemented Pagination Increment
+
+Authenticated `GET /api/v1/employees` currently accepts only `page` and `size`, once each. Defaults are `0` and `25`; page is within `0..2147483647`, and size within `1..100`. Parse ASCII digits only, accepting leading zeros and rejecting empty values, signs, whitespace, decimals, exponents, non-ASCII digits, and overflow. Return `400 VALIDATION_ERROR` for invalid/repeated parameters. Unsupported parameters, including the planned `q`, reference filters, and `sort`, return a generic query-field error without echoing their names/values. Authentication is checked before query validation; GET requires no CSRF token.
+
+The implemented response envelope contains `items`, `page`, `size`, `totalElements`, and `totalPages`. Items reuse the full employee response; metadata values are JSON integers. Ordering is fixed at `employeeNumber ASC, id ASC`. Empty databases have empty items and zero totals; out-of-range pages have empty items and actual totals. Counts and page offsets use long arithmetic. The service counts first and skips page fetching when its offset is beyond that count, including very large valid page numbers. In-range pages are bounded database reads with lookup labels fetched together.
+
+The read-only transaction uses the existing default isolation. A concurrent write between the count and page queries may change the visible rows, so the response is not a guaranteed snapshot; separate page requests likewise do not share a snapshot. No search, filters, selectable sorting, or new indexes are implemented in this increment.
+
+### Full Approved Listing Target — Remaining Parameters Are Planned
+
+Future example: `/api/v1/employees?page=0&size=25&q=asha&countryCode=IN&sort=fullName,asc`. This example is currently rejected because those additional parameters are not implemented.
 
 | Parameter | Behavior |
 | --- | --- |
-| `page` | Zero-based, default `0`, nonnegative integer. |
+| `page` | Zero-based, default `0`, integer from `0` through `2147483647`. |
 | `size` | Default `25`, integer from `1` through `100`. |
 | `q` | Trimmed, at most 200 characters; blank means absent. Case-insensitive literal substring of employee number OR full name. |
 | `departmentId` | Optional exact supported department filter. |
@@ -210,7 +220,7 @@ Implemented tests cover:
 - Unauthenticated reads, generic login failure, session timeout, CSRF issuance/refresh, login/logout, and consistent security error bodies.
 - Complete ordered reference catalogs, exact string IDs/integer minor units, current database values, empty catalogs, read access without CSRF, and absence of catalog write handlers.
 
-Search/filter/paging/sorting tests and independently calculated analytics with separate currencies, empty results, and `HALF_EVEN` rounding remain planned. Their contracts do not imply those features are implemented.
+Pagination tests cover defaults, traversal/totals, empty/out-of-range pages, parameter validation, and bounded employee/lookup loading without writes. Search/filter/selectable-sorting tests and independently calculated analytics with separate currencies, empty results, and `HALF_EVEN` rounding remain planned. Their contracts do not imply those features are implemented.
 
 DTOs and the `/api/v1` boundary allow future evolution. Partial updates, ETags, cursor pagination, additional analytics, history, and RBAC require separately approved contracts. They are not implemented or promised by the current API.
 

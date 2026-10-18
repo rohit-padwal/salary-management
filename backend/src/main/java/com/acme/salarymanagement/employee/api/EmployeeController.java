@@ -10,12 +10,14 @@ import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -37,6 +39,11 @@ class EmployeeController {
     ResponseEntity<EmployeeResponse> create(@Valid @RequestBody CreateEmployeeRequest request) {
         EmployeeResponse employee = EmployeeResponse.from(creation.create(request.toCommand()));
         return ResponseEntity.created(URI.create("/api/v1/employees/" + employee.id())).body(employee);
+    }
+
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    EmployeePageResponse list(@RequestParam MultiValueMap<String, String> parameters) {
+        return EmployeePageResponse.from(queries.list(EmployeePageParameters.parse(parameters)));
     }
 
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)

@@ -204,6 +204,41 @@ class EmployeePersistenceIT {
         assertEquals(0L, countEmployees());
     }
 
+    @ParameterizedTest
+    @CsvSource({"0,3,3,2", "3,3,1,2", "4,3,0,1", "2147483647,100,0,1"})
+    void listingLoadsOnlyTheRequestedEmployeesAndLabelsWithBoundedSelects(
+            int page, int size, int expectedItems, int expectedStatements) {
+        for (int number = 10; number > 0; number--) {
+            service.create(command("EMP-%02d".formatted(number), "Name " + number, "12.345", "KWD"));
+        }
+        var before = jdbc.queryForList("SELECT * FROM employees ORDER BY id");
+        var statistics = context.getBean(EntityManagerFactory.class).unwrap(SessionFactory.class).getStatistics();
+        boolean originallyEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+        try {
+            EmployeePageResult result = context.getBean(EmployeeQueryService.class).list(new EmployeePageRequest(page, size));
+            assertEquals(expectedItems, result.items().size());
+            assertEquals(10, result.totalElements());
+            assertEquals(size == 3 ? 4 : 1, result.totalPages());
+            if (!result.items().isEmpty()) {
+                EmployeeResult first = result.items().getFirst();
+                assertEquals("EMP-%02d".formatted(page * size + 1), first.employeeNumber());
+                assertEquals("Engineering", first.departmentName());
+                assertEquals("India", first.countryName());
+                assertEquals(new BigDecimal("12.345"), first.salaryAmount());
+            }
+            assertEquals(expectedStatements, statistics.getPrepareStatementCount());
+            assertEquals(expectedItems, statistics.getEntityStatistics(Employee.class.getName()).getLoadCount());
+            assertEquals(0, statistics.getEntityInsertCount());
+            assertEquals(0, statistics.getEntityUpdateCount());
+            assertEquals(0, statistics.getEntityDeleteCount());
+        } finally {
+            statistics.setStatisticsEnabled(originallyEnabled);
+        }
+        assertEquals(before, jdbc.queryForList("SELECT * FROM employees ORDER BY id"));
+    }
+
     @Test
     void twoTransactionsUsingTheSameLoadedVersionCannotBothCommit() throws Exception {
         EmployeeResult original = service.create(command("EMP-1", "Name", "1000", "USD"));

@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 import com.acme.salarymanagement.SalaryManagementApplication;
 import org.junit.jupiter.api.AfterAll;
@@ -307,6 +308,139 @@ class EmployeeApiIT {
     private HttpResponse<String> get(URI uri) throws Exception {
         return client.send(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10)).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void listsDefaultPageWithExactEnvelopeAndExistingEmployeeRepresentations() throws Exception {
+        insertListingEmployees(27);
+        var before = jdbc.queryForList("SELECT * FROM employees ORDER BY id");
+        HttpResponse<String> response = get(endpoint);
+        JsonNode page = assertPage(response, 0, 25, 27, 2);
+        assertEquals(25, page.path("items").size());
+        assertEquals(employeeNumbers(1, 26), page.path("items").valueStream()
+                .map(item -> item.path("employeeNumber").asString()).toList());
+        JsonNode first = page.path("items").get(0);
+        assertEquals(JSON.readTree(get(URI.create(endpoint + "/" + first.path("id").asString())).body()), first);
+        for (String field : List.of("id", "departmentId", "version", "salaryAmount")) {
+            assertTrue(first.path(field).isString());
+        }
+        assertEquals("12.345", first.path("salaryAmount").asString());
+        assertEquals("Engineering", first.path("departmentName").asString());
+        assertEquals("India", first.path("countryName").asString());
+        assertEquals(page, JSON.readTree(get(endpoint).body()));
+        assertEquals(before, jdbc.queryForList("SELECT * FROM employees ORDER BY id"));
+    }
+
+    @Test
+    void traversesPagesWithoutGapsOrDuplicatesAndPreservesRealTotalsPastTheEnd() throws Exception {
+        insertListingEmployees(7);
+        List<String> listed = new java.util.ArrayList<>();
+        for (int index = 0; index < 3; index++) {
+            JsonNode page = assertPage(get(URI.create(endpoint + "?page=" + index + "&size=3")), index, 3, 7, 3);
+            assertEquals(index < 2 ? 3 : 1, page.path("items").size());
+            page.path("items").valueStream().map(item -> item.path("employeeNumber").asString()).forEach(listed::add);
+        }
+        assertEquals(employeeNumbers(1, 8), listed);
+        assertEquals(0, assertPage(get(URI.create(endpoint + "?page=3&size=3")), 3, 3, 7, 3).path("items").size());
+    }
+
+    @Test
+    void returnsEmptyPageAndZeroTotalsForAnEmptyDatabase() throws Exception {
+        assertEquals(0, assertPage(get(endpoint), 0, 25, 0, 0).path("items").size());
+        assertEquals(0, assertPage(get(URI.create(endpoint + "?page=5&size=1")), 5, 1, 0, 0).path("items").size());
+    }
+
+    @Test
+    void acceptsIndividualDefaultsLeadingZerosAndTheMaximumPageSize() throws Exception {
+        insertListingEmployees(101);
+        assertEquals(100, assertPage(get(URI.create(endpoint + "?size=100")), 0, 100, 101, 2).path("items").size());
+        assertEquals(25, assertPage(get(URI.create(endpoint + "?page=1")), 1, 25, 101, 5).path("items").size());
+        assertEquals(1, assertPage(get(URI.create(endpoint + "?page=000&size=001")), 0, 1, 101, 101).path("items").size());
+    }
+
+    @Test
+    void acceptsALargeOutOfRangePageWithoutOverflowOrAnInvalidJpaOffset() throws Exception {
+        insertListingEmployees(3);
+        assertEquals(0, assertPage(get(URI.create(endpoint + "?page=2147483647&size=100")),
+                Integer.MAX_VALUE, 100, 3, 1).path("items").size());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"-1", "%2B1", "1.0", "1e0", "%201", "1%20", "abc", "", "2147483648", "999999999999999999999", "%D9%A1"})
+    void rejectsInvalidPageSyntaxOrRangeWithoutEchoingQueryValues(String value) throws Exception {
+        JsonNode problem = assertProblem(get(URI.create(endpoint + "?page=" + value)), 400, "VALIDATION_ERROR");
+        assertEquals("page", problem.path("errors").get(0).path("field").asString());
+        assertFalse(problem.toString().contains("rejectedValue"));
+        assertEquals(0L, countEmployees());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "101", "-1", "%2B1", "1.0", "1e0", "%201", "1%20", "abc", "", "2147483648", "%EF%BC%91"})
+    void rejectsInvalidPageSize(String value) throws Exception {
+        JsonNode problem = assertProblem(get(URI.create(endpoint + "?size=" + value)), 400, "VALIDATION_ERROR");
+        assertEquals("size", problem.path("errors").get(0).path("field").asString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"page=0&page=1", "size=1&size=2", "page=0&page=0"})
+    void rejectsRepeatedPaginationParameters(String query) throws Exception {
+        assertProblem(get(URI.create(endpoint + "?" + query)), 400, "VALIDATION_ERROR");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"q=private-search", "departmentId=1", "countryCode=IN", "currencyCode=USD",
+            "sort=employeeNumber,desc", "unexpected=private-value", "Page=1"})
+    void rejectsUnsupportedParametersInsteadOfSilentlyIgnoringThem(String query) throws Exception {
+        HttpResponse<String> response = get(URI.create(endpoint + "?" + query));
+        JsonNode problem = assertProblem(response, 400, "VALIDATION_ERROR");
+        assertEquals("query", problem.path("errors").get(0).path("field").asString());
+        assertFalse(response.body().contains("private-search"));
+        assertFalse(response.body().contains("private-value"));
+    }
+
+    @Test
+    void listingRequiresAuthenticationBeforeValidatingQueryParameters() throws Exception {
+        cookies.getCookieStore().removeAll();
+        assertProblem(get(endpoint), 401, "AUTHENTICATION_REQUIRED");
+        assertProblem(get(URI.create(endpoint + "?page=-1")), 401, "AUTHENTICATION_REQUIRED");
+    }
+
+    @Test
+    void listingNeedsNoCsrfCookieOrHeader() throws Exception {
+        cookies.getCookieStore().getCookies().stream().filter(cookie -> cookie.getName().equals("XSRF-TOKEN"))
+                .toList().forEach(cookie -> cookies.getCookieStore().remove(endpoint, cookie));
+        assertPage(get(endpoint), 0, 25, 0, 0);
+    }
+
+    private void insertListingEmployees(int count) {
+        // Reverse insertion order makes ordering by employee number observable.
+        for (int number = count; number > 0; number--) {
+            jdbc.update("""
+                    INSERT INTO employees (employee_number, full_name, department_id, country_code, salary_amount, currency_code)
+                    VALUES (?, ?, ?, 'IN', 12.345, 'KWD')
+                    """, "EMP-%03d".formatted(number), "Zoë 李 " + number, departmentId);
+        }
+    }
+
+    private List<String> employeeNumbers(int start, int end) {
+        return IntStream.range(start, end).mapToObj(number -> "EMP-%03d".formatted(number)).toList();
+    }
+
+    private JsonNode assertPage(HttpResponse<String> response, int page, int size, long totalElements, long totalPages) {
+        assertEquals(200, response.statusCode());
+        assertTrue(response.headers().firstValue("Content-Type").orElse("").startsWith("application/json"));
+        assertTrue(response.headers().firstValue("Cache-Control").orElse("").contains("no-store"));
+        JsonNode body = JSON.readTree(response.body());
+        assertEquals(5, body.size());
+        assertTrue(body.path("items").isArray());
+        for (String field : List.of("page", "size", "totalElements", "totalPages")) {
+            assertTrue(body.path(field).isIntegralNumber(), field);
+        }
+        assertEquals(page, body.path("page").asInt());
+        assertEquals(size, body.path("size").asInt());
+        assertEquals(totalElements, body.path("totalElements").asLong());
+        assertEquals(totalPages, body.path("totalPages").asLong());
+        return body;
     }
 
     @Test

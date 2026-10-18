@@ -63,7 +63,9 @@ Full editing is implemented at `PUT /api/v1/employees/{id}`, requiring six edita
 
 Authenticated `GET /api/v1/reference-data` is implemented with string department IDs and integer currency minor units. The response reads current supported catalogs in database order: department name/ID and country/currency code. Empty catalogs return empty arrays. The existing security policy requires a session but no CSRF token for GET. Catalog administration, caching, and pagination are excluded for these small migration-controlled tables; future live administration would need explicit consistency rules.
 
-Employee listing and analytics HTTP endpoints remain approved contracts awaiting implementation. Listing/analytics queries and production runtime verification remain later steps.
+Basic authenticated employee pagination is implemented with optional `page`/`size`, defaults `0`/`25`, page range `0..2147483647`, and size range `1..100`. Only single ASCII-digit values are accepted; unsupported/repeated parameters return `400`. Ordering is fixed to employee number/ID. Counts and offsets use long arithmetic, and an empty/out-of-range request returns empty items with actual totals. The service counts first, fetches only the requested in-range employees plus labels, and returns the existing employee representation in an application-owned envelope. Default read-only transaction isolation does not guarantee a snapshot across count/content or separate page requests.
+
+Search, filters, selectable sorting, and analytics remain approved contracts awaiting implementation. Their parameters are currently rejected instead of silently ignored. Query/index measurement, the 10,000-employee seed, and production runtime verification remain later steps.
 
 ## Questions Awaiting Resolution
 
