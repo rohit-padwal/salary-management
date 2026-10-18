@@ -36,7 +36,7 @@ Within a feature, controllers translate HTTP requests and responses, application
 
 Keep monetary calculations and validation independently testable. Spring and JPA integration can remain pragmatic; this design does not require a second framework-free entity model or repository abstraction for every operation.
 
-The Angular UI should follow the same feature responsibilities, with typed API services, reactive forms, and clear loading, empty, and error states. Share components when reuse exists. UI validation improves feedback; backend validation remains authoritative.
+The Angular UI should follow the same feature responsibilities, with typed API services, reactive forms, and clear loading, empty, and error states. Share components when reuse exists. UI validation improves feedback; backend validation remains authoritative. The approved [API contract](API.md) uses `/api/v1`, decimal strings for money, integer strings for IDs/versions, application-owned page responses, and Problem Details errors.
 
 ## Runtime and Deployment Structure
 
@@ -56,7 +56,7 @@ The trade-off is coupled frontend/backend releases and a build process that asse
 
 Use Spring Security with one configured HR account and session-based login. Protect employee and analytics APIs, including reads. Provide login and logout through the UI. Supply the username and password hash through deployment configuration; keep credentials out of the repository and application logs. Account registration, password recovery, user administration, and advanced RBAC remain outside the MVP.
 
-Use an HTTP-only session cookie, secure in deployment, with an explicit same-site policy. Retain CSRF protection and integrate Spring's token issuance/validation with Angular's client support, including token availability after authentication and logout. A readable CSRF-token cookie, if used, is distinct from the HTTP-only authentication cookie. Detailed endpoints, cookie settings, timeouts, and error contracts belong to later API/security implementation planning.
+Use an HTTP-only session cookie, secure over HTTPS in deployment, with `SameSite=Lax` and a 30-minute idle timeout. Retain CSRF protection. The [API contract](API.md) defines token initialization, login, session inspection, and logout, with a separate readable `XSRF-TOKEN` cookie and `X-XSRF-TOKEN` header. Refresh the token after login/logout; the authentication cookie stays HTTP-only. Spring Security handlers return API status/problem bodies instead of HTML redirects.
 
 | Alternative | Trade-off |
 | --- | --- |
@@ -74,7 +74,7 @@ Use Java `BigDecimal` and PostgreSQL `NUMERIC(19,4)` for positive gross annual b
 
 Paginate and aggregate in PostgreSQL rather than loading the entire dataset into the application or browser. Select indexes from the approved query patterns. Use versioned Flyway migrations and database constraints alongside application validation.
 
-Application services define transaction boundaries for use cases. The employee record has one JPA optimistic-lock version; the API must also check the version originally edited by the client to prevent stale forms overwriting newer data. Required fields, foreign keys, unique employee numbers, case-insensitive department uniqueness, and initial filter indexes are specified in [DATA_MODEL.md](DATA_MODEL.md). Step 7 will define API contracts, monetary representation across the browser/API boundary, analytics rounding, and validation/conflict responses. Executable migrations remain a later approved step.
+Application services define transaction boundaries for use cases. The employee record has one JPA optimistic-lock version; full updates must carry/check the version originally edited by the client, returning `409` on a stale edit. Required fields, foreign keys, unique employee numbers, case-insensitive department uniqueness, and initial filter indexes are specified in [DATA_MODEL.md](DATA_MODEL.md). The [API contract](API.md) defines validation, conflict responses, decimal-string money, and minor-unit `HALF_EVEN` average rounding. Each analytics response uses a consistent database snapshot. Executable implementation remains a later approved step.
 
 ## Verification Strategy
 

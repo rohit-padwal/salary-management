@@ -20,7 +20,7 @@ erDiagram
 | Column | Proposed PostgreSQL type | Purpose and constraints |
 | --- | --- | --- |
 | `id` | `BIGINT` identity | Internal primary key; stable independently of the HR employee number. |
-| `employee_number` | `VARCHAR(32)` | Required, unique, normalized uppercase identifier. Exact syntax and editability remain for Step 7. |
+| `employee_number` | `VARCHAR(32)` | Required, unique, normalized uppercase identifier; editable independently of internal `id`. ASCII letters/digits/hyphens/underscores, starting with a letter or digit; see [API rules](API.md). |
 | `full_name` | `VARCHAR(200)` | Required and nonblank; support international names without imposing a first/last-name split. |
 | `department_id` | `BIGINT` | Required foreign key to `departments.id`. |
 | `country_code` | `VARCHAR(2)` | Required foreign key to `countries.code`; employment country. |
@@ -32,7 +32,7 @@ erDiagram
 
 Database constraints must enforce required values, uniqueness, valid references, nonblank names, and positive finite salary amounts. Application validation provides understandable errors before persistence; database constraints remain the final protection against invalid structural state.
 
-Creation/latest-change timestamps provide operational metadata, not salary history, an audit log, or individual attribution. Exact timestamp initialization and API formatting belong to implementation/API design.
+Creation/latest-change timestamps provide operational metadata, not salary history, an audit log, or individual attribution. The API returns ISO 8601 UTC timestamp strings; exact system-managed timestamp initialization remains an implementation concern.
 
 ## Reference Data
 
@@ -62,7 +62,7 @@ The database salary constraint must explicitly reject `NaN`; a positive-value ch
 
 Currency-specific precision uses the supported currency record's metadata. A three-letter code is not sufficient validation. Changing supported metadata later requires reviewing existing salaries; do not silently reinterpret stored amounts.
 
-Group monetary analytics by currency. Salary totals may exceed the per-employee storage range, so aggregation must not narrow results back into the employee column type. Average rounding, output precision, and browser/API monetary representation remain Step 7 decisions. There is no exchange-rate conversion.
+Group monetary analytics by currency. Salary totals may exceed the per-employee storage range, so aggregation must not narrow results back into the employee column type. The [API contract](API.md) uses decimal strings, currency minor-unit output formatting, and one `HALF_EVEN` rounding step for averages. Totals/minimums/maximums remain exact. There is no exchange-rate conversion.
 
 ## Persistence Ownership and Transactions
 
@@ -74,7 +74,7 @@ Group monetary analytics by currency. Salary totals may exceed the per-employee 
 
 Use one employee version field for the aggregate. JPA optimistic locking detects concurrent persistence updates. The API must also carry the version originally edited by the user and check it; fetching the newest entity on submission without checking that original version would still allow a stale browser form to overwrite newer data.
 
-Conflict-response details belong to Step 7. Do not silently retry stale updates and overwrite the intervening change.
+The API requires the original version as a string in the full update request. A stale form or concurrent optimistic-lock conflict returns `409` with `STALE_EMPLOYEE`; duplicate employee numbers return `409` with `EMPLOYEE_NUMBER_CONFLICT`. Do not silently retry stale updates and overwrite the intervening change.
 
 ## Initial Indexes and Query Boundaries
 
@@ -82,7 +82,7 @@ Start with primary-key indexes, employee-number uniqueness, case-insensitive dep
 
 Use the unique employee ID as the final pagination sort tie-breaker. This provides a deterministic order for an unchanged dataset, not snapshot consistency while records are being edited.
 
-Finalize additional indexes against Step 7's query contracts. Do not index every sortable field. Ordinary B-tree indexes do not generally accelerate arbitrary substring searches such as `%name%`; measure the 10,000-record workload before adding a specialized index or database extension. Combined filters and alternate sort orders may require different plans; the proposed indexes are a starting point, not a performance guarantee.
+The [query contracts](API.md) define literal case-insensitive substring search, department/country/currency filters, and an explicit sort allowlist. Salary sorting requires a currency filter. Finalize additional indexes against measurements of those queries, not every sortable field. Ordinary B-tree indexes do not generally accelerate arbitrary substring searches such as `%name%`; measure the 10,000-record workload before adding a specialized index or database extension. Combined filters and alternate sort orders may require different plans; the proposed indexes are a starting point, not a performance guarantee.
 
 Analytics remains database-side aggregation. Do not add materialized summaries, caches, partitioning, or distributed infrastructure without a demonstrated requirement.
 

@@ -44,7 +44,7 @@ This is a concise record of meaningful exchanges, not a complete prompt transcri
 
 ## Pending Clarification and Subsequent Work
 
-Incubyte's reply remains pending according to the user. Review differences explicitly and obtain approval before changing scope or implementation. Step 7 will define API contracts and remaining business rules; executable migrations, dependencies, and application scaffolding remain later steps.
+Incubyte's reply remains pending according to the user. Review differences explicitly and obtain approval before changing scope or implementation. Requirements, architecture, data model, and API contracts are documented project decisions; executable migrations, dependencies, and application scaffolding remain later approved steps.
 
 ## Step 6: Data Model Review and Documentation
 
@@ -61,3 +61,19 @@ Incubyte's reply remains pending according to the user. Review differences expli
 **Authorized changes:** Create `DATA_MODEL.md` and update `ARCHITECTURE.md`, `ASSUMPTIONS.md`, and this record. The requirements baseline, API design, executable migrations, database setup, and application code are outside this step.
 
 **Actual verification:** Python checks passed for local links, whitespace, final newlines, code fences, table columns, secret patterns, required model sections, and exactly the four approved documentation changes. The requirements baseline remained byte-for-byte unchanged at 401 words. `git diff --check` passed. No database/application tests or builds ran because no executable implementation exists. Git outcomes are reported from actual commands in the completion report.
+
+## Step 7: API Contract Review and Documentation
+
+**User direction:** Continue to API/business-rule review, then approve the presented contracts and documentation changes.
+
+**AI contribution:** Proposed REST paths, DTO representations, normalization/validation, query behavior, analytics semantics, session/CSRF endpoints, and errors. Consulted RFC 9457 and official Spring Security, Angular, and Java rounding documentation; references are recorded in [API.md](API.md).
+
+**Approved decisions:** Use `/api/v1`, exact decimal strings for money and integer strings for IDs/versions, full version-checked updates, editable employee numbers, application-owned pagination, literal case-insensitive search, and supported reference filters. Require one currency for salary sorting. Separate all monetary analytics by currency, use consistent analytics snapshots, and round averages once with `HALF_EVEN` at currency minor units.
+
+**Approved access/error behavior:** One HR account, URL-encoded Spring Security login, session inspection/logout, CSRF initialization and refresh after login/logout, HTTP-only authentication cookie, secure deployment cookies, `SameSite=Lax`, and a 30-minute idle timeout. Use Problem Details for controller/security failures and distinct `409` codes for duplicate numbers versus stale edits.
+
+**Trade-offs retained:** Offset pagination has no cross-request snapshot promise. Full `PUT` avoids partial-update semantics; a body version is selected instead of conditional headers. Decimal strings require deliberate frontend formatting. Separate currencies prevent a combined organization-wide monetary total. No application endpoint is implemented by documenting these choices.
+
+**Authorized changes:** Create `API.md`; update `DATA_MODEL.md`, `ARCHITECTURE.md`, `ASSUMPTIONS.md`, and this record. The requirements baseline, application scaffolding, dependencies, database migrations, and runtime resources are outside this step.
+
+**Actual verification:** Python documentation checks passed for local links, whitespace, final newlines, code fences, table columns, secret patterns, required API sections, and exactly the five approved documentation changes. Both JSON examples parsed; the update example uses strings for money/version. An independent Python `Decimal` calculation confirmed total `2000.01` and `HALF_EVEN` average `1000.00` for salaries `1000.00` and `1000.01`. The requirements baseline was byte-for-byte unchanged at 401 words, and `git diff --check` passed. These checks verify the documentation and its arithmetic example, not a running application. No application/database tests or builds ran. Git outcomes are reported from actual commands in the completion report.
