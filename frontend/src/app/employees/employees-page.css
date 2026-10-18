@@ -1,0 +1,130 @@
+.directory {
+  min-width: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 1rem;
+  background: #fff;
+  overflow: hidden;
+}
+.directory-heading {
+  padding: 1.5rem 1.5rem 0;
+}
+h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+.directory-heading p {
+  margin: 0.5rem 0 0;
+  color: var(--app-muted);
+  font-size: 0.875rem;
+}
+.search-form {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+.search-field {
+  flex: 1;
+  min-width: 0;
+}
+.search-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+.search-actions button {
+  min-height: 2.75rem;
+}
+.results {
+  border-top: 1px solid var(--app-border);
+}
+.results-message {
+  padding: 1rem 1.5rem;
+}
+.results-message p {
+  margin: 0;
+  color: var(--app-muted);
+}
+.results-message h3 {
+  margin: 1rem 0 0.5rem;
+  font-size: 1.125rem;
+}
+.results-message button {
+  margin-top: 1rem;
+  min-height: 2.75rem;
+}
+.results-message [role='alert'] {
+  color: #8b1c1c;
+}
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.table-scroll:focus-visible {
+  outline: 3px solid var(--app-focus);
+  outline-offset: -3px;
+}
+table {
+  width: 100%;
+  min-width: 46rem;
+}
+th {
+  color: var(--app-muted);
+  background: #f8faff;
+  white-space: nowrap;
+}
+td {
+  max-width: 20rem;
+  padding-block: 1rem;
+  overflow-wrap: anywhere;
+}
+.employee-name {
+  display: block;
+  font-weight: 600;
+}
+.secondary {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--app-muted);
+  font-size: 0.75rem;
+}
+.salary-cell {
+  text-align: right;
+}
+.salary-amount {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+mat-paginator[hidden] {
+  display: none;
+}
+@media (max-width: 48rem) {
+  .search-form {
+    flex-direction: column;
+    padding: 1.25rem;
+  }
+  .search-field {
+    width: 100%;
+  }
+  .search-actions {
+    flex-wrap: wrap;
+    padding-top: 0;
+  }
+  .directory-heading {
+    padding: 1.25rem 1.25rem 0;
+  }
+  .results-message {
+    padding: 1rem 1.25rem;
+  }
+}

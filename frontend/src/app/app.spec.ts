@@ -5,6 +5,7 @@ import { appConfig } from './app.config';
 import { signal } from '@angular/core';
 import { of } from 'rxjs';
 import { SessionService } from './auth/session-service';
+import { EmployeeApi } from './employees/employee-api';
 
 describe('Application navigation', () => {
   let fixture: ComponentFixture<App>;
@@ -18,6 +19,12 @@ describe('Application navigation', () => {
         {
           provide: SessionService,
           useValue: { restore: () => of({ username: 'hr' }), user: signal({ username: 'hr' }) },
+        },
+        {
+          provide: EmployeeApi,
+          useValue: {
+            list: () => of({ items: [], page: 0, size: 25, totalElements: 0, totalPages: 0 }),
+          },
         },
       ],
     }).compileComponents();

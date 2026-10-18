@@ -8,8 +8,10 @@
   --app-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   /* Keep Material controls on local system fonts rather than the prebuilt theme's Roboto. */
   --mat-sys-body-large-font: var(--app-font-family);
+  --mat-sys-body-medium-font: var(--app-font-family);
   --mat-sys-body-small-font: var(--app-font-family);
   --mat-sys-label-large-font: var(--app-font-family);
+  --mat-sys-title-small-font: var(--app-font-family);
 }
 
 * {

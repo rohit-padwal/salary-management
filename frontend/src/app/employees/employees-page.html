@@ -1,13 +1,118 @@
 <div class="page-heading">
   <p class="eyebrow">Employee management</p>
   <h1>Employees</h1>
-  <p class="page-description">Manage employee details and current compensation in one place.</p>
+  <p class="page-description">Find employees and review their current compensation.</p>
 </div>
 
-<section class="placeholder-panel" aria-labelledby="directory-heading">
-  <p class="panel-label">Employee directory</p>
-  <h2 id="directory-heading">A clear view of your team.</h2>
-  <p>
-    The employee directory is being prepared. Employee records and editing will be available here.
-  </p>
+<section class="directory" aria-labelledby="directory-heading">
+  <div class="directory-heading">
+    <h2 id="directory-heading">Employee directory</h2>
+    <p>Gross annual base salary, shown in each employee’s recorded currency.</p>
+  </div>
+  <form class="search-form" [formGroup]="form" (ngSubmit)="submitSearch()">
+    <mat-form-field appearance="outline" class="search-field">
+      <mat-label>Search employees</mat-label>
+      <input matInput name="q" formControlName="q" type="search" autocomplete="off" />
+      <mat-hint>Search by name or employee number. Up to 200 characters.</mat-hint>
+      @if (search.hasError('searchTooLong')) {
+        <mat-error>Search must contain at most 200 characters.</mat-error>
+      }
+      @if (search.hasError('invalidSearch')) {
+        <mat-error>Search cannot contain a null character.</mat-error>
+      }
+    </mat-form-field>
+    <div class="search-actions">
+      <button matButton="filled" type="submit">Search</button>
+      <button matButton type="button" (click)="clearSearch()">Clear search</button>
+    </div>
+  </form>
+
+  @let view = state();
+  <div class="results" [attr.aria-busy]="view.kind === 'loading'">
+    <div class="results-message">
+      @switch (view.kind) {
+        @case ('loading') {
+          <p role="status">Loading employees…</p>
+        }
+        @case ('error') {
+          <p role="alert">{{ view.message }}</p>
+          <button matButton="tonal" type="button" (click)="retry()">Retry</button>
+        }
+        @case ('loaded') {
+          @if (page(); as result) {
+            <p role="status">
+              {{ result.totalElements }} {{ query().q ? 'matching ' : ''
+              }}{{ result.totalElements === 1 ? 'employee' : 'employees' }}
+            </p>
+            @if (!result.items.length) {
+              @if (result.totalElements > 0) {
+                <h3>This page has no employees</h3>
+                <p>The results may have changed. Return to the first page.</p>
+                <button matButton="tonal" type="button" (click)="firstPage()">
+                  Go to first page
+                </button>
+              } @else if (query().q) {
+                <h3>No matching employees</h3>
+                <p>Try another name or employee number, or clear your search.</p>
+              } @else {
+                <h3>No employees yet</h3>
+                <p>The employee directory is currently empty.</p>
+              }
+            }
+          }
+        }
+      }
+    </div>
+    <div
+      class="table-scroll"
+      role="region"
+      aria-label="Employee table. Scroll horizontally to view all columns."
+      tabindex="0"
+    >
+      <table mat-table [dataSource]="rows()" [trackBy]="trackEmployee">
+        <caption class="visually-hidden">
+          Employee directory: gross annual base salaries in the recorded currency.
+        </caption>
+        <ng-container matColumnDef="employee">
+          <th mat-header-cell *matHeaderCellDef scope="col">Employee</th>
+          <td mat-cell *matCellDef="let employee">
+            <span class="employee-name">{{ employee.fullName }}</span
+            ><span class="secondary">{{ employee.employeeNumber }}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="department">
+          <th mat-header-cell *matHeaderCellDef scope="col">Department</th>
+          <td mat-cell *matCellDef="let employee">{{ employee.departmentName }}</td>
+        </ng-container>
+        <ng-container matColumnDef="country">
+          <th mat-header-cell *matHeaderCellDef scope="col">Country</th>
+          <td mat-cell *matCellDef="let employee">
+            {{ employee.countryName }}<span class="secondary">{{ employee.countryCode }}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="salary">
+          <th mat-header-cell *matHeaderCellDef scope="col" class="salary-cell">
+            Annual base salary
+          </th>
+          <td mat-cell *matCellDef="let employee" class="salary-cell">
+            <span class="salary-amount">{{ employee.salaryAmount }}</span
+            ><span class="secondary">{{ employee.currencyCode }}</span>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      </table>
+    </div>
+    <mat-paginator
+      aria-label="Employee directory pages"
+      [hidden]="page()?.items?.length === 0"
+      [length]="page()?.totalElements ?? 0"
+      [pageIndex]="query().page"
+      [pageSize]="query().size"
+      [pageSizeOptions]="[25, 50, 100]"
+      [showFirstLastButtons]="true"
+      [disabled]="state().kind !== 'loaded'"
+      (page)="changePage($event)"
+    />
+  </div>
 </section>

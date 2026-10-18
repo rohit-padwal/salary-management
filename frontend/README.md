@@ -1,6 +1,6 @@
 # Salary Management Frontend
 
-Angular 22.2.3 application foundation using standalone components, routing, strict TypeScript/templates, zoneless change detection, and typed HttpClient providers. The responsive shell includes employee/analytics placeholder routes, active navigation, page titles, a skip link, and a recoverable not-found page. Login, session restoration, protected navigation, and logout are implemented. Employee data workflows and analytics reporting remain later steps.
+Angular 22.2.3 application foundation using standalone components, routing, strict TypeScript/templates, zoneless change detection, and typed HttpClient providers. The responsive shell includes the employee directory, an analytics placeholder, active navigation, page titles, a skip link, and a recoverable not-found page. Login, session restoration, protected navigation, and logout are implemented. Employee creation/editing, filter/sort controls, and analytics reporting remain later steps.
 
 ## Setup
 
@@ -29,9 +29,17 @@ npm start
 
 ## Development
 
-Open `http://127.0.0.1:4200`. The configured development proxy forwards `/api` and nested API paths to `http://127.0.0.1:8080`, preserving the browser origin for session/CSRF integration. Start the backend separately with the `local` profile and the configured HR account described in the main setup guide. Opening a protected route without a session shows `/login`. Sign in with that configured account; credentials are not supplied by the frontend. Placeholder feature pages still make no employee/salary data requests, while authentication uses the real API. Restart the development server after changing `proxy.conf.json`.
+Open `http://127.0.0.1:4200`. The configured development proxy forwards `/api` and nested API paths to `http://127.0.0.1:8080`, preserving the browser origin for session/CSRF integration. Start the backend separately with the `local` profile and the configured HR account described in the main setup guide. Opening a protected route without a session shows `/login`. Sign in with that configured account; credentials are not supplied by the frontend. The employee directory and authentication use real APIs; the analytics page remains a placeholder. Restart the development server after changing `proxy.conf.json`.
 
 `npm test` runs the CLI-managed Vitest suite once; `npm run test:watch` watches changes. `npm run format` formats frontend files. The production build writes to ignored `dist/salary-management-ui/browser`; packaging those assets with Spring Boot is a later step.
+
+## Employee Directory
+
+`employees/employee-api` performs typed GET requests with `page`, `size`, and optional `q`. The component uses a bounded server page directly, without client-side filtering or a `MatTableDataSource` holding the whole directory. Salary amounts, IDs, and versions remain exact strings; salary display appends the recorded currency code without numeric conversion.
+
+Search uses a typed Reactive Form and explicit button/Enter submission. Search or page-size changes reset to page zero; options are 25/50/100. Superseded requests and reads on destroyed pages are cancelled. Errors do not terminate later searches/retries, and stale rows are cleared during loading/failure. The UI distinguishes an empty directory, no search matches, an empty out-of-range page, and safe connectivity/access/server errors. API 401 uses the existing login redirect. Query/page state is local and resets on leaving/reloading; URL persistence, filter/sort controls, and editing are separate increments.
+
+The native Material table has scoped column headers, a caption, and a focusable horizontal scrolling region on narrow screens. Paginator controls stay mounted during reads. Tests use HttpTestingController for request parameters, exact values, cancellation, state transitions, validation, and recovery. Chrome verification against Spring Boot and an isolated PostgreSQL database seeded with 10,000 employees covers real server pages, keyboard pagination/focus, page-size reset, search, no matches, retry, API session expiry, and 320–1440px layouts. The temporary database is removed afterward; development data is untouched. Browser smoke tooling remains local rather than an application dependency.
 
 ## Authentication
 
