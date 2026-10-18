@@ -28,10 +28,24 @@
         >Analytics</a
       >
     </nav>
+    @if (session.user(); as user) {
+      <div class="account-controls">
+        <span class="account-name" [title]="user.username">{{ user.username }}</span>
+        <button matButton type="button" (click)="logout()" [disabled]="signingOut()">
+          Sign out
+        </button>
+      </div>
+    }
   </div>
 </header>
 
 <main #mainContent id="main-content" class="main-content" tabindex="-1">
+  @if (signingOut()) {
+    <p role="status">Signing out…</p>
+  }
+  @if (logoutError(); as message) {
+    <p class="logout-error" role="alert">{{ message }}</p>
+  }
   <router-outlet />
 </main>
 

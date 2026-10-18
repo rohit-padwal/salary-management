@@ -5,6 +5,11 @@
   --app-muted: #52627b;
   --app-border: #e0e6ef;
   --app-focus: #2b5ca1;
+  --app-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Keep Material controls on local system fonts rather than the prebuilt theme's Roboto. */
+  --mat-sys-body-large-font: var(--app-font-family);
+  --mat-sys-body-small-font: var(--app-font-family);
+  --mat-sys-label-large-font: var(--app-font-family);
 }
 
 * {
@@ -15,12 +20,7 @@ body {
   margin: 0;
   background: var(--app-background);
   color: var(--app-text);
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+  font-family: var(--app-font-family);
   line-height: 1.5;
 }
 

@@ -1,0 +1,55 @@
+<main class="login-page">
+  <section class="login-card" aria-labelledby="login-heading">
+    <p class="eyebrow">Salary Management</p>
+    <h1 id="login-heading">Sign in</h1>
+    <p class="page-description">Use your HR account to access employee compensation.</p>
+    @if (expired) {
+      <p role="status">Your session has ended. Please sign in again.</p>
+    }
+    @if (error(); as message) {
+      <p class="login-error" role="alert">{{ message }}</p>
+    }
+    @if (checking()) {
+      <p role="status">Checking your session…</p>
+    } @else {
+      <form [formGroup]="form" (ngSubmit)="submit()">
+        <fieldset [disabled]="submitting()">
+          <legend class="visually-hidden">HR account credentials</legend>
+          <mat-form-field appearance="outline">
+            <mat-label>Username</mat-label>
+            <input
+              matInput
+              name="username"
+              formControlName="username"
+              autocomplete="username"
+              autocapitalize="none"
+              spellcheck="false"
+              required
+            />
+            @if (form.controls.username.hasError('required')) {
+              <mat-error>Username is required.</mat-error>
+            }
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Password</mat-label>
+            <input
+              matInput
+              name="password"
+              formControlName="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+            @if (form.controls.password.hasError('required')) {
+              <mat-error>Password is required.</mat-error>
+            }
+          </mat-form-field>
+          <button matButton="filled" type="submit" [disabled]="submitting()">Sign in</button>
+        </fieldset>
+        @if (submitting()) {
+          <p role="status">Signing in…</p>
+        }
+      </form>
+    }
+  </section>
+</main>

@@ -179,6 +179,8 @@ The authentication cookie is HTTP-only, secure over HTTPS in deployment, and use
 
 For Angular integration, use a separate readable `XSRF-TOKEN` cookie and the `X-XSRF-TOKEN` request header. The CSRF endpoint must actually issue/materialize the token even though its response body is empty. The authentication cookie must remain inaccessible to JavaScript.
 
+The Angular client now implements login/session/logout using relative same-origin URLs and built-in XSRF handling. It obtains a CSRF token before login/logout and refreshes it afterward; a failed anonymous-token refresh after completed logout does not undo that logout. Login form passwords are cleared after submission; localStorage/sessionStorage persistence is not used. Protected route activation checks the server session, and non-auth API 401 responses redirect to login without replaying writes. Employee/analytics UI workflows remain later steps.
+
 The client obtains a CSRF token before login or other mutating requests and refreshes it after successful login and logout. Spring must validate tokens for state-changing requests, including login/logout. Security-filter failures use the same problem response format as controller errors. A missing/invalid CSRF token can produce `403` before controller processing; the UI must not treat every `403` as bad credentials.
 
 Single-account session access does not implement registration, password recovery, user administration, advanced RBAC, or individual audit attribution.

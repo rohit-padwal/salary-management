@@ -1,10 +1,17 @@
 import { Routes } from '@angular/router';
 import { AppShell } from './layout/app-shell';
+import { sessionGuard } from './auth/session-guard';
 
 export const routes: Routes = [
   {
+    path: 'login',
+    title: 'Sign in | Salary Management',
+    loadComponent: () => import('./auth/login-page').then((page) => page.LoginPage),
+  },
+  {
     path: '',
     component: AppShell,
+    canActivateChild: [sessionGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'employees' },
       {
