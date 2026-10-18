@@ -1,3 +1,5 @@
+import { stripOuterWhitespace } from '../shared/text-normalization';
+
 export const employeeFormMessages = {
   employeeNumber: {
     REQUIRED: 'Employee number is required.',
@@ -37,7 +39,7 @@ export const employeeFormMessages = {
 export type EmployeeField = keyof typeof employeeFormMessages;
 
 export function employeeNumberError(value: string): string | null {
-  const number = value.trim();
+  const number = stripOuterWhitespace(value);
   if (!number) return employeeFormMessages.employeeNumber.REQUIRED;
   return /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/.test(number)
     ? null
@@ -45,7 +47,7 @@ export function employeeNumberError(value: string): string | null {
 }
 
 export function fullNameError(value: string): string | null {
-  const name = value.trim();
+  const name = stripOuterWhitespace(value);
   if (!name) return employeeFormMessages.fullName.REQUIRED;
   if (Array.from(name).length > 200) return employeeFormMessages.fullName.TOO_LONG;
   return name.includes('\0') ? employeeFormMessages.fullName.INVALID_FORMAT : null;
@@ -53,7 +55,7 @@ export function fullNameError(value: string): string | null {
 
 export function salaryError(value: string, minorUnits: number | undefined): string | null {
   const messages = employeeFormMessages.salaryAmount;
-  if (!value.trim()) return messages.REQUIRED;
+  if (!stripOuterWhitespace(value)) return messages.REQUIRED;
   if (!/^-?[0-9]+(?:\.[0-9]+)?$/.test(value)) return messages.INVALID_FORMAT;
   if (value.startsWith('-') || !/[1-9]/.test(value)) return messages.MUST_BE_POSITIVE;
   const [integer, fraction = ''] = value.split('.');

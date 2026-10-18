@@ -296,6 +296,7 @@ Flyway owns schema changes. Add new versioned migration files for changes after 
 - [Assumptions and pending clarification](docs/ASSUMPTIONS.md)
 - [AI usage: major code changes](docs/AI_USAGE.md)
 - [Local integration verification](docs/VERIFICATION.md)
+- [Test coverage and edge-case review](docs/COVERAGE_REVIEW.md)
 
 ## Deployment
 

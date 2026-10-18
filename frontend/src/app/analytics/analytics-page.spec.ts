@@ -289,6 +289,29 @@ describe('Compensation analytics dashboard', () => {
     expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(2);
   });
 
+  it('preserves literal outer search characters and validates their full code-point length', async () => {
+    await ready();
+    const literal = '\u202f李\u2007';
+    await choose('q', ' ' + literal + ' ');
+    await apply();
+    const exact = request();
+    expect(exact.request.params.get('q')).toBe(literal);
+    exact.flush(report);
+    await fixture.whenStable();
+    await choose('q', '\u00a0' + '李'.repeat(199) + '\u00a0');
+    await apply();
+    http.expectNone((req) => req.url === '/api/v1/analytics/compensation');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Search must contain at most 200 characters.',
+    );
+    await choose('q', '\u001c' + '😀'.repeat(200) + '\u001f');
+    await apply();
+    const accepted = request();
+    expect(accepted.request.params.get('q')).toBe('😀'.repeat(200));
+    accepted.flush(report);
+    await fixture.whenStable();
+  });
+
   it('escapes labels returned by the server instead of treating them as HTML', async () => {
     http.expectOne('/api/v1/reference-data').flush(catalogs);
     request().flush({

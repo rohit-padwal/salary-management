@@ -43,6 +43,10 @@ Use the existing cookie session and Angular’s default same-origin XSRF support
 
 The guard rechecks the server during protected route activation, accepting a small extra request rather than trusting cached identity. Server authorization remains required for every API call. Logout failures do not claim success; token-refresh failure after completed logout does not restore authentication. Existing form fields/buttons use Material’s public system typography tokens to retain local fonts. Future employee services reuse HttpClient and its existing CSRF/expiry handling; RBAC, SSO, and production same-origin packaging require separate decisions.
 
+## Text Normalization
+
+Employee text validation and applied searches share `shared/text-normalization`, matching the API's Java 21 whitespace rule. Non-breaking spaces, figure/narrow non-breaking spaces, and BOM stay literal; code-point limits apply after only API-defined outer whitespace is stripped. Original name/identifier form values remain server-normalized, and salary syntax is never stripped. See the [coverage review](COVERAGE_REVIEW.md) for the defect, regression evidence, and upgrade boundary.
+
 ## Directory Read Flow
 
 Use `EmployeeApi` with explicit page/size/search/filter parameters and typed sort fields/directions. The default remains employee-number ascending; the server always adds its stable ID tie-breaker. A page-sized array feeds the native Material table directly; pagination and matching remain on the database. IDs, versions, and salary values stay strings, including values beyond JavaScript’s safe integer range. Salary display preserves the server decimal scale and records its currency separately.

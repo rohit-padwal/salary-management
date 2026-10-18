@@ -49,6 +49,14 @@ class EmployeeInputTest {
     }
 
     @Test
+    void trimsApiWhitespaceButCountsNonbreakingCharactersInNamesAndRejectsThemInIdentifiers() {
+        String name = "😀".repeat(200);
+        assertEquals(name, EmployeeInput.validate(command("\u001cEMP-1\u001f", "\u001c" + name + "\u001f", 1L, "IN", "USD")).fullName());
+        assertInvalidField("employeeNumber", command("\u00a0EMP-1\u00a0", name, 1L, "IN", "USD"));
+        assertInvalidField("fullName", command("EMP-1", "\u00a0" + "李".repeat(199) + "\u00a0", 1L, "IN", "USD"));
+    }
+
+    @Test
     void rejectsMissingOrNonPositiveDepartmentId() {
         for (Long id : new Long[] {null, 0L, -1L}) {
             assertInvalidField("departmentId", command("EMP-1", "Name", id, "IN", "USD"));

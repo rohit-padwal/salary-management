@@ -224,7 +224,7 @@ class CompensationAnalyticsApiIT {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"%", "_", "!", "\\", "' OR 1=1 --", "Zoë 李"})
+    @ValueSource(strings = {"%", "_", "!", "\\", "' OR 1=1 --", "Zoë 李", "\u00a0", "\u2007", "\u202f", "\ufeff"})
     void decodesLiteralAndUnicodeSearchWithoutInterpretingItAsSql(String term) throws Exception {
         insert("EMP-1", "Person " + term, 1, "IN", "USD", "10");
         insert("EMP-2", "Person Other", 1, "IN", "USD", "20");

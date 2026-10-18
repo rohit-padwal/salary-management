@@ -1,6 +1,24 @@
 import { employeeNumberError, fullNameError, salaryError } from './employee-form-validation';
 
 describe('Employee form validation', () => {
+  it('uses API whitespace rules for identifiers and name length without removing significant characters', () => {
+    expect(employeeNumberError('\u001cEMP-1\u2003')).toBeNull();
+    expect(employeeNumberError('\u00a0EMP-1\u00a0')).not.toBeNull();
+    expect(fullNameError('\u001c' + '😀'.repeat(200) + '\u001f')).toBeNull();
+    expect(fullNameError('\u00a0' + '李'.repeat(199) + '\u00a0')).toBe(
+      'Full name must contain at most 200 characters.',
+    );
+  });
+
+  it('uses API blank semantics for salary errors but never trims salary syntax', () => {
+    expect(salaryError('\u001c\u2003', 2)).toBe('Salary is required.');
+    expect(salaryError('\u00a0', 2)).toBe(
+      'Salary must be a plain decimal without symbols or separators.',
+    );
+    expect(salaryError('\u001c1.00\u001f', 2)).toBe(
+      'Salary must be a plain decimal without symbols or separators.',
+    );
+  });
   it('accepts lowercase employee numbers, trims outer spaces for validation, and rejects non-ASCII expansion', () => {
     expect(employeeNumberError(' emp_123-ab ')).toBeNull();
     expect(employeeNumberError('A'.repeat(32))).toBeNull();

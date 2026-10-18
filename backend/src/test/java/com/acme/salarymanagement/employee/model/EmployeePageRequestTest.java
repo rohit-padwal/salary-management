@@ -35,6 +35,16 @@ class EmployeePageRequestTest {
         assertEquals("Zoë  李", new EmployeePageRequest(0, 25, " \u2003Zoë  李\t\n").q());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"\u00a0", "\u2007", "\u202f", "\ufeff"})
+    void preservesSignificantOuterCharactersInLiteralSearch(String character) {
+        String literal = character + "Zoë" + character;
+        assertEquals(literal, new EmployeePageRequest(0, 25, " \u001c" + literal + "\u001f ").q());
+        InputValidationException failure = assertThrows(InputValidationException.class,
+                () -> new EmployeePageRequest(0, 25, character + "李".repeat(199) + character));
+        assertEquals("TOO_LONG", failure.code());
+    }
+
     @Test
     void validatesLengthInUnicodeCodePointsAfterTrimming() {
         String maximum = "𠀀".repeat(200);

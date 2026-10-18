@@ -7,6 +7,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { BehaviorSubject, catchError, map, of, startWith, switchMap } from 'rxjs';
 import { employeeSearchValidator } from '../employees/employee-search-validation';
+import { stripOuterWhitespace } from '../shared/text-normalization';
 import { ReferenceData } from '../reference-data/reference-data';
 import { ReferenceDataApi } from '../reference-data/reference-data-api';
 import { CompensationGrouping, CompensationQuery, CompensationReport } from './compensation';
@@ -106,7 +107,7 @@ export class AnalyticsPage {
       return;
     }
     const values = this.form.getRawValue();
-    const q = values.q.trim();
+    const q = stripOuterWhitespace(values.q);
     this.form.controls.q.setValue(q);
     this.load({ ...values, q });
   }

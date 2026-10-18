@@ -53,3 +53,7 @@ Use a disposable database, the existing seed command, the configured HR account,
 This verifies local UI/API/database integration with the development proxy. The Angular production build was compiled separately; serving those assets from Spring Boot, client-route fallback, deployed HTTPS/cookie/proxy behavior, hosting, and production workflow verification remain delivery work. These checks are not a load benchmark or a complete security audit.
 
 The committed HTTP workflow test provides a regression check for future employee/report changes. A permanent browser runner or CI workflow would be a separate tooling decision. Existing memory-only drafts and local report/directory query state remain unchanged.
+
+## Step 23 Follow-Up
+
+The [coverage and edge-case review](COVERAGE_REVIEW.md) identified and fixed a client/API Unicode-whitespace mismatch. Its separately scoped results are 194 frontend tests, 161 backend unit tests, and 64 selected analytics API integration tests, plus build/format checks and real-browser literal-search verification. Other integration suites were not rerun in that step. The Step 22 full-suite results above remain the record of that earlier run.

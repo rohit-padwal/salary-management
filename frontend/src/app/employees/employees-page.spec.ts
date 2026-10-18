@@ -174,6 +174,20 @@ describe('Employee directory', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Asha Rao');
   });
 
+  it('preserves significant outer search characters and strips only API whitespace', async () => {
+    await loaded();
+    const literal = '\u00a0Asha\ufeff';
+    await search(' ' + literal + ' ');
+    const exact = http.expectOne((req) => req.url === '/api/v1/employees');
+    const actual = exact.request.params.get('q');
+    exact.flush({ items: [], page: 0, size: 25, totalElements: 0, totalPages: 0 });
+    await fixture.whenStable();
+    expect(actual).toBe(literal);
+    await search('\u001cAsha\u001f');
+    request(0, 25, 'Asha').flush({ items: [], page: 0, size: 25, totalElements: 0, totalPages: 0 });
+    await fixture.whenStable();
+  });
+
   it('does not send a request while typing until search is submitted', async () => {
     await loaded();
     const input = fixture.nativeElement.querySelector('input[name="q"]');

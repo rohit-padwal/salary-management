@@ -18,6 +18,7 @@ import {
 } from './employee';
 import { EmployeeApi } from './employee-api';
 import { employeeSearchValidator } from './employee-search-validation';
+import { stripOuterWhitespace } from '../shared/text-normalization';
 import { ReferenceDataApi } from '../reference-data/reference-data-api';
 import { ReferenceData } from '../reference-data/reference-data';
 
@@ -138,7 +139,7 @@ export class EmployeesPage {
       sortField,
       sortDirection,
     } = this.form.getRawValue();
-    const q = draft.trim();
+    const q = stripOuterWhitespace(draft);
     this.search.setValue(q);
     this.load({
       page: 0,
