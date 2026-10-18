@@ -7,7 +7,7 @@ import com.acme.salarymanagement.validation.InputValidationException;
 record EmployeeInput(String employeeNumber, String fullName, long departmentId,
         String countryCode, String salaryAmount, String currencyCode) {
 
-    static EmployeeInput validate(CreateEmployeeCommand command) {
+    static EmployeeInput validate(EmployeeDetails command) {
         String number = required(command.employeeNumber(), "employeeNumber");
         // Validate ASCII before uppercasing: Unicode case expansion must not create an accepted identifier.
         if (!number.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,31}")) {

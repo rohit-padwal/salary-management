@@ -1,8 +1,10 @@
 package com.acme.salarymanagement.employee;
 
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.Optional;
 
+import com.acme.salarymanagement.infrastructure.DatabaseClock;
 import com.acme.salarymanagement.referencedata.Country;
 import com.acme.salarymanagement.referencedata.CountryRepository;
 import com.acme.salarymanagement.referencedata.Currency;
@@ -36,12 +38,15 @@ class EmployeeCreationServiceTest {
     private CountryRepository countries;
     @Mock
     private CurrencyRepository currencies;
+    @Mock
+    private DatabaseClock clock;
 
     private EmployeeCreationService service;
 
     @BeforeEach
     void setUp() {
-        service = new EmployeeCreationService(employees, departments, countries, currencies);
+        service = new EmployeeCreationService(employees, new EmployeeDataResolver(departments, countries, currencies), clock);
+        when(clock.now()).thenReturn(Instant.parse("2026-10-18T10:00:00Z"));
         when(departments.findById(1L)).thenReturn(Optional.of(mock(Department.class)));
         when(countries.findById("IN")).thenReturn(Optional.of(mock(Country.class)));
         Currency currency = mock(Currency.class);
@@ -64,8 +69,8 @@ class EmployeeCreationServiceTest {
         assertSame(failure, assertThrows(DataIntegrityViolationException.class, () -> service.create(validCommand())));
     }
 
-    private CreateEmployeeCommand validCommand() {
-        return new CreateEmployeeCommand("EMP-1", "Name", 1L, "IN", "1000", "USD");
+    private EmployeeDetails validCommand() {
+        return new EmployeeDetails("EMP-1", "Name", 1L, "IN", "1000", "USD");
     }
 
     private DataIntegrityViolationException constraintFailure(String state, String constraint) {

@@ -7,10 +7,13 @@ import java.util.Locale;
 
 import com.acme.salarymanagement.employee.EmployeeNumberConflictException;
 import com.acme.salarymanagement.employee.EmployeeNotFoundException;
+import com.acme.salarymanagement.employee.StaleEmployeeException;
 import com.acme.salarymanagement.validation.InputValidationException;
+import jakarta.persistence.OptimisticLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -46,6 +49,12 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     ResponseEntity<Object> employeeNotFound(EmployeeNotFoundException failure, WebRequest request) {
         return response(problem(404, "EMPLOYEE_NOT_FOUND", "Employee not found",
                 "Employee was not found.", request), HttpHeaders.EMPTY);
+    }
+
+    @ExceptionHandler({StaleEmployeeException.class, OptimisticLockingFailureException.class, OptimisticLockException.class})
+    ResponseEntity<Object> staleEmployee(Exception failure, WebRequest request) {
+        return response(problem(409, "STALE_EMPLOYEE", "Stale employee",
+                "Employee changed since it was loaded. Reload it before saving.", request), HttpHeaders.EMPTY);
     }
 
     @ExceptionHandler(Exception.class)

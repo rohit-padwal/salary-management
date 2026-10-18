@@ -1,6 +1,6 @@
 package com.acme.salarymanagement.employee;
 
-public record CreateEmployeeCommand(
+public record EmployeeDetails(
         String employeeNumber,
         String fullName,
         Long departmentId,

@@ -1,6 +1,6 @@
 # API Contracts and Business Rules
 
-**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`), retrieval (`GET /api/v1/employees/{id}`), and authentication/session/CSRF endpoints are implemented and tested. Employee listing/editing, analytics, and reference-data HTTP endpoints remain unimplemented; their paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
+**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`), retrieval/editing (`GET`/`PUT /api/v1/employees/{id}`), and authentication/session/CSRF endpoints are implemented and tested. Employee listing, analytics, and reference-data HTTP endpoints remain unimplemented; their paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
 
 ## Conventions
 
@@ -25,7 +25,7 @@ Use JSON REST endpoints under `/api/v1`, with explicit request/response DTOs. Pa
 
 There is no employee deletion, partial-update, or separate salary-update endpoint in the MVP. `PUT` updates an existing employee; a missing employee returns `404` rather than creating a record.
 
-Creation and retrieval by ID are currently implemented in this table. The creation `Location` can be followed to retrieve the record. Until listing exists, an authenticated `GET /api/v1/employees` returns `405` with an `Allow` header.
+Creation, retrieval, and full editing by ID are currently implemented in this table. The creation `Location` can be followed to retrieve the record. Until listing exists, an authenticated `GET /api/v1/employees` returns `405` with an `Allow` header.
 
 Retrieval requires authentication but no CSRF header. Parse path IDs with the same positive-`Long` helper used for creation's department ID: ASCII digits only, no signs/whitespace/decimal points/exponents, and no overflow. Leading zeros are accepted. Invalid values return `400 VALIDATION_ERROR` with field `id`; a valid missing ID returns `404 EMPLOYEE_NOT_FOUND`. Authentication is checked before parsing/lookup. A successful read returns the same response representation without changing salary, version, or timestamps.
 
@@ -74,6 +74,10 @@ The UI retains the version returned when the employee was loaded. On `PUT`, comp
 Do not silently retry against the latest version. The UI preserves the user's form and offers reloading the employee. A duplicate normalized employee number returns `409` with `EMPLOYEE_NUMBER_CONFLICT`, including when a concurrent write reaches the database unique constraint first. Do not expose database exception details.
 
 The body version was selected instead of ETag/`If-Match` for this form-driven MVP. Future conditional-header support would need an explicit contract change.
+
+PUT accepts exactly the six editable string fields and a nonnegative integer-string `version` within the `Long` range; zero and leading zeros are accepted. Signs, whitespace, exponents, decimals, overflow, numeric JSON values, and server-managed write fields are rejected. Input normalization, reference checks, currency precision, and employee-number uniqueness use the same rules as creation. The client version is checked against the managed entity and is never assigned to its version field.
+
+An effective update returns `200` with a new persisted version/update timestamp, preserving ID and creation timestamp. A normalized no-change submission returns the existing representation without advancing metadata. Its version is still verified through commit using an optimistic lock, so a concurrent writer can produce `409` even when the submitted values cause no write. Flush-time and commit-time optimistic failures use the same `STALE_EMPLOYEE` response. No automatic retry or upsert is performed. A valid missing target returns `404 EMPLOYEE_NOT_FOUND`.
 
 ## Listing Contract
 
@@ -192,18 +196,16 @@ Problem type identifiers are stable URI references; the sample uses a non-HTTP U
 
 Creation validation responses contain safe field/code/message entries. Multiple missing fields are returned in field-name order; business validation may return the first failing rule. Malformed JSON, unknown fields, and wrong JSON types use a generic `INVALID_REQUEST` response rather than parser exception text. Unhandled failures use generic `INTERNAL_ERROR`; application logging records the exception type without the request body or database exception message. Security-filter errors continue to be handled before controller processing.
 
-## Planned Verification and Future Expansion
+## Verification and Future Expansion
 
-When implementation is approved, use Red -> Green -> Refactor for business rules and verify:
+Implemented tests cover:
 
 - Normalization, unique employee-number conflicts, international names, missing/unknown fields, and invalid references.
 - Plain decimal-string handling, meaningful excess precision, trailing zeros, storage limits, and exact monetary round trips.
-- Literal wildcard search, AND filters, paging boundaries, allowed sorts, and rejection of mixed-currency salary sorting.
-- Atomic updates, original-version stale forms, and races detected by optimistic locking/unique constraints.
-- Independently calculated analytics, multiple currencies, empty results, and `HALF_EVEN` ties without double rounding.
+- Atomic updates, original-version stale forms, unchanged submissions, and races detected by optimistic locking/unique constraints, including commit-time verification.
 - Unauthenticated reads, generic login failure, session timeout, CSRF issuance/refresh, login/logout, and consistent security error bodies.
 
-These are planned application tests, not executed checks. Documentation verification covers local links, example JSON syntax, independent decimal arithmetic, formatting, scope consistency, and secret patterns.
+Search/filter/paging/sorting tests and independently calculated analytics with separate currencies, empty results, and `HALF_EVEN` rounding remain planned. Their contracts do not imply those features are implemented.
 
 DTOs and the `/api/v1` boundary allow future evolution. Partial updates, ETags, cursor pagination, additional analytics, history, and RBAC require separately approved contracts. They are not implemented or promised by the current API.
 

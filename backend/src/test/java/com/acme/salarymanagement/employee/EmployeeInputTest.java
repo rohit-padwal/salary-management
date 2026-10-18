@@ -68,11 +68,11 @@ class EmployeeInputTest {
         assertInvalidField("currencyCode", command("EMP-1", "Name", 1L, "IN", code));
     }
 
-    private CreateEmployeeCommand command(String number, String name, Long departmentId, String country, String currency) {
-        return new CreateEmployeeCommand(number, name, departmentId, country, "1000.00", currency);
+    private EmployeeDetails command(String number, String name, Long departmentId, String country, String currency) {
+        return new EmployeeDetails(number, name, departmentId, country, "1000.00", currency);
     }
 
-    private void assertInvalidField(String field, CreateEmployeeCommand command) {
+    private void assertInvalidField(String field, EmployeeDetails command) {
         assertEquals(field, assertThrows(InputValidationException.class, () -> EmployeeInput.validate(command)).field());
     }
 }

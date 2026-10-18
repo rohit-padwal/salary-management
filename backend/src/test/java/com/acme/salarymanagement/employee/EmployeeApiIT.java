@@ -309,6 +309,185 @@ class EmployeeApiIT {
                 HttpResponse.BodyHandlers.ofString());
     }
 
+    @Test
+    void replacesAllEditableValuesAndReturnsNewVersionWithPreservedIdentity() throws Exception {
+        JsonNode original = createTarget();
+        String id = original.path("id").asString();
+        long finance = jdbc.queryForObject("SELECT id FROM departments WHERE name = 'Finance'", Long.class);
+        ObjectNode request = updateRequest().put("employeeNumber", " emp-99 ").put("fullName", "  Zoë  李  ")
+                .put("departmentId", Long.toString(finance)).put("countryCode", " us ")
+                .put("currencyCode", " kwd ").put("salaryAmount", "12.3450");
+        HttpResponse<String> response = put(id, request);
+        assertEquals(200, response.statusCode());
+        JsonNode updated = JSON.readTree(response.body());
+        assertEquals(id, updated.path("id").asString());
+        assertEquals("EMP-99", updated.path("employeeNumber").asString());
+        assertEquals("Zoë  李", updated.path("fullName").asString());
+        assertEquals(Long.toString(finance), updated.path("departmentId").asString());
+        assertEquals("Finance", updated.path("departmentName").asString());
+        assertEquals("US", updated.path("countryCode").asString());
+        assertEquals("United States", updated.path("countryName").asString());
+        assertEquals("KWD", updated.path("currencyCode").asString());
+        assertEquals("12.345", updated.path("salaryAmount").asString());
+        assertEquals("1", updated.path("version").asString());
+        assertEquals(original.path("createdAt"), updated.path("createdAt"));
+        assertTrue(Instant.parse(updated.path("updatedAt").asString()).isAfter(Instant.parse(original.path("updatedAt").asString())));
+        assertEquals(updated, JSON.readTree(get(URI.create(endpoint + "/" + id)).body()));
+        assertEquals(1L, countEmployees());
+    }
+
+    @Test
+    void unchangedNormalizedSubmissionPreservesVersionAndTimestamps() throws Exception {
+        JsonNode original = createTarget();
+        String id = original.path("id").asString();
+        var before = jdbc.queryForMap("SELECT * FROM employees WHERE id = ?", Long.parseLong(id));
+        HttpResponse<String> response = put(id, updateRequest().put("employeeNumber", " emp-1 ")
+                .put("fullName", " Asha Rao ").put("countryCode", " in ").put("currencyCode", " usd ")
+                .put("salaryAmount", "1000.0000"));
+        assertEquals(200, response.statusCode());
+        assertEquals(original, JSON.readTree(response.body()));
+        assertEquals(before, jdbc.queryForMap("SELECT * FROM employees WHERE id = ?", Long.parseLong(id)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"employeeNumber", "fullName", "departmentId", "countryCode", "salaryAmount", "currencyCode", "version"})
+    void updateRequiresEveryField(String field) throws Exception {
+        String id = createTarget().path("id").asString();
+        ObjectNode request = updateRequest();
+        request.remove(field);
+        assertUpdateFieldError(put(id, request), id, field, "REQUIRED");
+        assertUpdateFieldError(put(id, updateRequest().putNull(field)), id, field, "REQUIRED");
+        assertUpdateFieldError(put(id, updateRequest().put(field, " ")), id, field, "REQUIRED");
+        assertEquals("0", JSON.readTree(get(URI.create(endpoint + "/" + id)).body()).path("version").asString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"-1", "+0", "0.0", "0e0", " 0", "0 ", "abc", "9223372036854775808"})
+    void rejectsMalformedAndOutOfRangeOriginalVersions(String version) throws Exception {
+        String id = createTarget().path("id").asString();
+        JsonNode problem = assertProblem(put(id, updateRequest().put("version", version)), 400,
+                "VALIDATION_ERROR", "/api/v1/employees/" + id);
+        assertEquals("version", problem.path("errors").get(0).path("field").asString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "false", "[]", "{}"})
+    void originalVersionMustBeAJsonString(String value) throws Exception {
+        String id = createTarget().path("id").asString();
+        ObjectNode request = updateRequest();
+        request.set("version", JSON.readTree(value));
+        assertProblem(put(id, request), 400, "INVALID_REQUEST", "/api/v1/employees/" + id);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"id", "createdAt", "updatedAt", "unexpected"})
+    void rejectsServerManagedAndUnknownUpdateFields(String field) throws Exception {
+        String id = createTarget().path("id").asString();
+        assertProblem(put(id, updateRequest().put(field, "client-controlled")), 400,
+                "INVALID_REQUEST", "/api/v1/employees/" + id);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"departmentId,9223372036854775807,UNKNOWN_REFERENCE", "countryCode,ZZ,UNKNOWN_REFERENCE",
+            "currencyCode,ZZZ,UNKNOWN_REFERENCE", "salaryAmount,1.001,EXCESS_PRECISION", "salaryAmount,0,MUST_BE_POSITIVE"})
+    void invalidReplacementRollsBackAllEmployeeChanges(String field, String value, String code) throws Exception {
+        String id = createTarget().path("id").asString();
+        var before = jdbc.queryForMap("SELECT * FROM employees WHERE id = ?", Long.parseLong(id));
+        assertUpdateFieldError(put(id, updateRequest().put("fullName", "Changed Name")
+                .put("employeeNumber", "EMP-CHANGED").put(field, value)), id, field, code);
+        assertEquals(before, jdbc.queryForMap("SELECT * FROM employees WHERE id = ?", Long.parseLong(id)));
+    }
+
+    @Test
+    void currencyAndAmountAreValidatedTogetherWithoutConversion() throws Exception {
+        String id = createTarget().path("id").asString();
+        assertUpdateFieldError(put(id, updateRequest().put("currencyCode", "JPY").put("salaryAmount", "12.34")),
+                id, "salaryAmount", "EXCESS_PRECISION");
+        HttpResponse<String> response = put(id, updateRequest().put("currencyCode", "JPY").put("salaryAmount", "1200.0000"));
+        assertEquals(200, response.statusCode());
+        assertEquals("1200", JSON.readTree(response.body()).path("salaryAmount").asString());
+        assertEquals("JPY", JSON.readTree(response.body()).path("currencyCode").asString());
+    }
+
+    @Test
+    void duplicateNumberRollsBackReplacementWithoutAffectingEitherEmployee() throws Exception {
+        String id = createTarget().path("id").asString();
+        assertEquals(201, post(validRequest().put("employeeNumber", "EMP-2").toString()).statusCode());
+        var before = jdbc.queryForList("SELECT * FROM employees ORDER BY id");
+        assertProblem(put(id, updateRequest().put("employeeNumber", " emp-2 ").put("fullName", "Changed")),
+                409, "EMPLOYEE_NUMBER_CONFLICT", "/api/v1/employees/" + id);
+        assertEquals(before, jdbc.queryForList("SELECT * FROM employees ORDER BY id"));
+    }
+
+    @Test
+    void staleFormCannotOverwriteNewerValuesEvenWhenSubmittingOldUnchangedValues() throws Exception {
+        String id = createTarget().path("id").asString();
+        HttpResponse<String> first = put(id, updateRequest().put("salaryAmount", "2000"));
+        assertEquals(200, first.statusCode());
+        assertProblem(put(id, updateRequest()), 409, "STALE_EMPLOYEE", "/api/v1/employees/" + id);
+        assertEquals(JSON.readTree(first.body()), JSON.readTree(get(URI.create(endpoint + "/" + id)).body()));
+        assertProblem(put(id, updateRequest().put("version", "9223372036854775807")),
+                409, "STALE_EMPLOYEE", "/api/v1/employees/" + id);
+    }
+
+    @Test
+    void missingUpdateTargetReturnsNotFoundWithoutInsertingAnEmployee() throws Exception {
+        assertProblem(put("9223372036854775807", updateRequest()), 404, "EMPLOYEE_NOT_FOUND",
+                "/api/v1/employees/9223372036854775807");
+        assertEquals(0L, countEmployees());
+    }
+
+    @Test
+    void concurrentHttpUpdatesProduceOneSuccessAndOneStaleConflict() throws Exception {
+        String id = createTarget().path("id").asString();
+        CyclicBarrier start = new CyclicBarrier(2);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> { start.await(10, TimeUnit.SECONDS); return put(id, updateRequest().put("salaryAmount", "2000")); });
+            var second = executor.submit(() -> { start.await(10, TimeUnit.SECONDS); return put(id, updateRequest().put("salaryAmount", "3000")); });
+            var responses = List.of(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS));
+            assertEquals(List.of(200, 409), responses.stream().map(HttpResponse::statusCode).sorted().toList());
+            HttpResponse<String> winner = responses.stream().filter(response -> response.statusCode() == 200).findFirst().orElseThrow();
+            HttpResponse<String> loser = responses.stream().filter(response -> response.statusCode() == 409).findFirst().orElseThrow();
+            assertProblem(loser, 409, "STALE_EMPLOYEE", "/api/v1/employees/" + id);
+            assertEquals("1", JSON.readTree(winner.body()).path("version").asString());
+            assertEquals(JSON.readTree(winner.body()), JSON.readTree(get(URI.create(endpoint + "/" + id)).body()));
+        }
+    }
+
+    @Test
+    void updateRequiresAuthenticationAndCsrf() throws Exception {
+        String id = createTarget().path("id").asString();
+        URI uri = URI.create(endpoint + "/" + id);
+        HttpRequest request = HttpRequest.newBuilder(uri).header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(updateRequest().toString())).build();
+        assertProblem(client.send(request, HttpResponse.BodyHandlers.ofString()), 403, "CSRF_INVALID", uri.getPath());
+        cookies.getCookieStore().getCookies().stream().filter(cookie -> cookie.getName().equals("JSESSIONID"))
+                .toList().forEach(cookie -> cookies.getCookieStore().remove(endpoint, cookie));
+        assertProblem(put(id, updateRequest()), 401, "AUTHENTICATION_REQUIRED", uri.getPath());
+    }
+
+    private JsonNode createTarget() throws Exception {
+        HttpResponse<String> response = post(validRequest().toString());
+        assertEquals(201, response.statusCode());
+        return JSON.readTree(response.body());
+    }
+
+    private ObjectNode updateRequest() {
+        return validRequest().put("version", "0");
+    }
+
+    private HttpResponse<String> put(String id, ObjectNode body) throws Exception {
+        return client.send(HttpRequest.newBuilder(URI.create(endpoint + "/" + id)).timeout(Duration.ofSeconds(15))
+                .header("Content-Type", "application/json").header("X-XSRF-TOKEN", token)
+                .PUT(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private void assertUpdateFieldError(HttpResponse<String> response, String id, String field, String code) {
+        JsonNode errors = assertProblem(response, 400, "VALIDATION_ERROR", "/api/v1/employees/" + id).path("errors");
+        assertEquals(field, errors.get(0).path("field").asString());
+        assertEquals(code, errors.get(0).path("code").asString());
+    }
+
     private ObjectNode validRequest() {
         return JSON.createObjectNode().put("employeeNumber", "EMP-1").put("fullName", "Asha Rao")
                 .put("departmentId", Long.toString(departmentId)).put("countryCode", "IN")

@@ -4,7 +4,7 @@ Employee salary management for an HR Manager overseeing 10,000 employees across 
 
 ## Current Status
 
-The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation and retrieval by ID are available through JSON APIs, with session authentication and Angular-compatible CSRF protection. Editing/listing, reference-data/analytics endpoints, employee seeding, and the Angular UI remain planned.
+The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Listing, reference-data/analytics endpoints, employee seeding, and the Angular UI remain planned.
 
 ## Backend Toolchain
 
@@ -139,6 +139,26 @@ Send authenticated `GET /api/v1/employees/{id}`, or follow the creation response
 
 IDs must contain ASCII digits and represent a positive value within Java's `Long` range. Leading zeros are accepted; signs, whitespace, decimal points, exponents, and out-of-range values return `400 VALIDATION_ERROR` for field `id`. A valid ID with no employee returns `404 EMPLOYEE_NOT_FOUND`. Unauthenticated requests return `401` before lookup or ID validation. Error responses exclude query strings.
 
+## Edit an Employee
+
+Send authenticated, CSRF-protected `PUT /api/v1/employees/{id}` with all six editable fields and the original `version` from GET. All seven values must be JSON strings. For example:
+
+```json
+{
+  "employeeNumber": "EMP-000001",
+  "fullName": "Asha Rao",
+  "departmentId": "1",
+  "countryCode": "IN",
+  "salaryAmount": "145000.00",
+  "currencyCode": "USD",
+  "version": "0"
+}
+```
+
+Success returns `200` with the updated employee. An effective change advances its server-managed version and update timestamp; ID and creation timestamp stay unchanged. If the normalized values already match, the existing version/timestamps are returned. The original-version check still applies, including concurrent changes detected at transaction commit. Currency and amount are replaced together without conversion.
+
+Invalid input returns `400`, a missing target `404`, a duplicate number `409 EMPLOYEE_NUMBER_CONFLICT`, and an outdated version/concurrent edit `409 STALE_EMPLOYEE`. Invalid or conflicting updates leave the employee unchanged. Reload after a stale conflict rather than retrying with an overwritten version. PUT does not create missing records or provide salary history.
+
 ## Verification and Testing
 
 The migration suite checks fresh setup, repeat migration/validation, reference data, exact decimal storage, required values, unique identifiers, invalid salaries, reference integrity, and protected lookup deletion. Each test rolls back its changes; its disposable database is separate from the persistent development database.
@@ -147,9 +167,11 @@ Employee-creation unit tests cover normalization, international names, positive 
 
 Security unit tests reject missing/plaintext/malformed account configuration and verify web startup fails without an explicit account. HTTP tests use isolated PostgreSQL and a real embedded server to exercise cookies, login/session/logout, protected reads/mutations, invalid credentials, CSRF rotation and failures, session invalidation/replay, content types, and JSON errors. Secure cookie attributes are checked separately from local HTTP behavior; the tests do not establish production TLS/proxy readiness.
 
-`EmployeeApiIT` exercises authenticated creation and retrieval, exact response types/formatting, required fields, strict JSON types/fields, malformed bodies, invalid references and salaries, Unicode limits, duplicates/concurrency, unsupported media types, and access enforcement. It follows created resource locations across currencies and verifies unchanged persisted records. `EmployeePersistenceIT` includes a retrieval check using Hibernate statistics: employee and lookup data require one prepared query and no entity writes. Focused unit tests verify shared positive-ID parsing, IDs above JavaScript's safe integer range, and generic error responses that exclude exception details and query values.
+`EmployeeApiIT` exercises authenticated creation, retrieval, and editing, exact response types/formatting, required fields, strict JSON types/fields, malformed bodies, invalid references and salaries, Unicode limits, duplicates/concurrency, unsupported media types, and access enforcement. It verifies full replacement, metadata/version behavior, unchanged submissions, rollback, and stale-form conflicts. `EmployeePersistenceIT` checks single-query retrieval and coordinates concurrent transactions with barriers/latches to verify competing edits and commit-time validation of an unchanged submission. Focused unit/MVC tests verify ID formatting/parsing, safe errors, and explicit/JPA/Spring optimistic failures mapping to `409`.
 
-The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Editing/stale-form behavior, listing, reference-data/analytics endpoints, and the frontend remain future work.
+Creation and effective updates obtain latest-change metadata from PostgreSQL's transaction clock. JPA manages the version; the client-supplied version is only a precondition. Unchanged submissions perform no employee write. Tests use disposable databases and do not reset development data.
+
+The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Listing, reference-data/analytics endpoints, and the frontend remain future work.
 
 Flyway owns schema changes. Add new versioned migration files for changes after a migration has been committed/applied; do not rewrite completed migrations. Hibernate validates the schema at startup and does not generate it. Separate `schema.sql`/`data.sql` initialization and Open Session in View are disabled.
 

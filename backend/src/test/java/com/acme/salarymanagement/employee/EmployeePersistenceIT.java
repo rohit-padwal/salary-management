@@ -4,12 +4,15 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import com.acme.salarymanagement.SalaryManagementApplication;
 import com.acme.salarymanagement.validation.InputValidationException;
 import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.OptimisticLockException;
 import org.hibernate.SessionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -20,7 +23,10 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -108,13 +114,13 @@ class EmployeePersistenceIT {
 
     @Test
     void rejectsUnknownReferencesWithoutWritingEmployee() {
-        List<CreateEmployeeCommand> invalid = List.of(
-                new CreateEmployeeCommand("EMP-1", "Name", Long.MAX_VALUE, "IN", "1000", "USD"),
-                new CreateEmployeeCommand("EMP-1", "Name", departmentId, "ZZ", "1000", "USD"),
-                new CreateEmployeeCommand("EMP-1", "Name", departmentId, "IN", "1000", "ZZZ"));
+        List<EmployeeDetails> invalid = List.of(
+                new EmployeeDetails("EMP-1", "Name", Long.MAX_VALUE, "IN", "1000", "USD"),
+                new EmployeeDetails("EMP-1", "Name", departmentId, "ZZ", "1000", "USD"),
+                new EmployeeDetails("EMP-1", "Name", departmentId, "IN", "1000", "ZZZ"));
         List<String> fields = List.of("departmentId", "countryCode", "currencyCode");
         for (int i = 0; i < invalid.size(); i++) {
-            CreateEmployeeCommand command = invalid.get(i);
+            EmployeeDetails command = invalid.get(i);
             InputValidationException error = assertThrows(InputValidationException.class, () -> service.create(command));
             assertEquals(fields.get(i), error.field());
             assertEquals("UNKNOWN_REFERENCE", error.code());
@@ -198,8 +204,96 @@ class EmployeePersistenceIT {
         assertEquals(0L, countEmployees());
     }
 
-    private CreateEmployeeCommand command(String number, String name, String salary, String currency) {
-        return new CreateEmployeeCommand(number, name, departmentId, " in ", salary, currency);
+    @Test
+    void twoTransactionsUsingTheSameLoadedVersionCannotBothCommit() throws Exception {
+        EmployeeResult original = service.create(command("EMP-1", "Name", "1000", "USD"));
+        CyclicBarrier loaded = new CyclicBarrier(2);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> raceUpdate(original.id(), "2000", loaded));
+            var second = executor.submit(() -> raceUpdate(original.id(), "3000", loaded));
+            List<String> outcomes = List.of(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS));
+            assertEquals(1L, outcomes.stream().filter("updated"::equals).count());
+            assertEquals(1L, outcomes.stream().filter("stale"::equals).count());
+        }
+        EmployeeResult stored = context.getBean(EmployeeQueryService.class).getById(original.id());
+        assertEquals(1L, stored.version());
+        assertTrue(List.of(new BigDecimal("2000.00"), new BigDecimal("3000.00")).contains(stored.salaryAmount()));
+        assertEquals(1L, countEmployees());
+    }
+
+    @Test
+    void updatesEmployeeAtomicallyAndPreservesCreationMetadata() {
+        EmployeeResult original = service.create(command("EMP-1", "Name", "1000", "USD"));
+        EmployeeResult updated = context.getBean(EmployeeUpdateService.class).update(original.id(),
+                new UpdateEmployeeCommand(command("EMP-1", "Changed Name", "2000", "USD"), 0));
+        assertEquals(original.id(), updated.id());
+        assertEquals(original.createdAt(), updated.createdAt());
+        assertEquals(1L, updated.version());
+        assertEquals(new BigDecimal("2000.00"), updated.salaryAmount());
+        assertEquals("Changed Name", updated.fullName());
+        assertEquals(updated, context.getBean(EmployeeQueryService.class).getById(original.id()));
+    }
+
+    @Test
+    void unchangedSubmissionStillRejectsAConcurrentChangeAtCommit() throws Exception {
+        EmployeeDetails details = command("EMP-1", "Name", "1000", "USD");
+        EmployeeResult original = service.create(details);
+        CountDownLatch noChangePrepared = new CountDownLatch(1);
+        CountDownLatch writerCommitted = new CountDownLatch(1);
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var noChange = executor.submit(() -> new TransactionTemplate(context.getBean(PlatformTransactionManager.class))
+                    .execute(status -> {
+                        EmployeeResult result = context.getBean(EmployeeUpdateService.class)
+                                .update(original.id(), new UpdateEmployeeCommand(details, 0));
+                        noChangePrepared.countDown();
+                        await(writerCommitted);
+                        return result;
+                    }));
+            try {
+                assertTrue(noChangePrepared.await(10, TimeUnit.SECONDS));
+                context.getBean(EmployeeUpdateService.class).update(original.id(),
+                        new UpdateEmployeeCommand(command("EMP-1", "Name", "2000", "USD"), 0));
+            } finally {
+                writerCommitted.countDown();
+            }
+            ExecutionException failure = assertThrows(ExecutionException.class, () -> noChange.get(15, TimeUnit.SECONDS));
+            assertTrue(failure.getCause() instanceof OptimisticLockingFailureException
+                    || failure.getCause() instanceof OptimisticLockException, failure.getCause().getClass().getName());
+        }
+        EmployeeResult stored = context.getBean(EmployeeQueryService.class).getById(original.id());
+        assertEquals(new BigDecimal("2000.00"), stored.salaryAmount());
+        assertEquals(1L, stored.version());
+    }
+
+    private String raceUpdate(long id, String salary, CyclicBarrier loaded) {
+        try {
+            new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
+                context.getBean(EmployeeRepository.class).findById(id).orElseThrow();
+                try {
+                    loaded.await(10, TimeUnit.SECONDS);
+                } catch (Exception failure) {
+                    throw new IllegalStateException("Could not synchronize test transactions", failure);
+                }
+                return context.getBean(EmployeeUpdateService.class).update(id,
+                        new UpdateEmployeeCommand(command("EMP-1", "Name", salary, "USD"), 0));
+            });
+            return "updated";
+        } catch (StaleEmployeeException | OptimisticLockingFailureException | OptimisticLockException conflict) {
+            return "stale";
+        }
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            assertTrue(latch.await(10, TimeUnit.SECONDS));
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Test transaction interrupted", interrupted);
+        }
+    }
+
+    private EmployeeDetails command(String number, String name, String salary, String currency) {
+        return new EmployeeDetails(number, name, departmentId, " in ", salary, currency);
     }
 
     private long countEmployees() {

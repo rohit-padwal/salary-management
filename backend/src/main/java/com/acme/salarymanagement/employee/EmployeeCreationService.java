@@ -1,16 +1,6 @@
 package com.acme.salarymanagement.employee;
 
-import java.math.BigDecimal;
-
-import com.acme.salarymanagement.compensation.SalaryRules;
-import com.acme.salarymanagement.referencedata.Country;
-import com.acme.salarymanagement.referencedata.CountryRepository;
-import com.acme.salarymanagement.referencedata.Currency;
-import com.acme.salarymanagement.referencedata.CurrencyRepository;
-import com.acme.salarymanagement.referencedata.Department;
-import com.acme.salarymanagement.referencedata.DepartmentRepository;
-import com.acme.salarymanagement.validation.InputValidationException;
-import org.hibernate.exception.ConstraintViolationException;
+import com.acme.salarymanagement.infrastructure.DatabaseClock;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,46 +9,25 @@ import org.springframework.transaction.annotation.Transactional;
 public class EmployeeCreationService {
 
     private final EmployeeRepository employees;
-    private final DepartmentRepository departments;
-    private final CountryRepository countries;
-    private final CurrencyRepository currencies;
+    private final EmployeeDataResolver data;
+    private final DatabaseClock clock;
 
-    EmployeeCreationService(EmployeeRepository employees, DepartmentRepository departments,
-            CountryRepository countries, CurrencyRepository currencies) {
+    EmployeeCreationService(EmployeeRepository employees, EmployeeDataResolver data, DatabaseClock clock) {
         this.employees = employees;
-        this.departments = departments;
-        this.countries = countries;
-        this.currencies = currencies;
+        this.data = data;
+        this.clock = clock;
     }
 
     @Transactional
-    public EmployeeResult create(CreateEmployeeCommand command) {
-        EmployeeInput input = EmployeeInput.validate(command);
-        Department department = departments.findById(input.departmentId())
-                .orElseThrow(() -> unknownReference("departmentId", "Select a supported department."));
-        Country country = countries.findById(input.countryCode())
-                .orElseThrow(() -> unknownReference("countryCode", "Select a supported country."));
-        Currency currency = currencies.findById(input.currencyCode())
-                .orElseThrow(() -> unknownReference("currencyCode", "Select a supported currency."));
-        BigDecimal salary = SalaryRules.validate(input.salaryAmount(), currency.getMinorUnits());
+    public EmployeeResult create(EmployeeDetails command) {
+        ResolvedEmployeeData resolved = data.resolve(command);
 
         try {
             // Flush inside this boundary so a concurrent unique-key violation is translated here.
-            Employee employee = employees.saveAndFlush(new Employee(input, department, country, currency, salary));
+            Employee employee = employees.saveAndFlush(new Employee(resolved, clock.now()));
             return employee.toResult();
         } catch (DataIntegrityViolationException failure) {
-            for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
-                if (cause instanceof ConstraintViolationException constraint
-                        && "23505".equals(constraint.getSQLState())
-                        && "uq_employees_employee_number".equals(constraint.getConstraintName())) {
-                    throw new EmployeeNumberConflictException(failure);
-                }
-            }
-            throw failure;
+            throw EmployeeWriteConflicts.translate(failure);
         }
-    }
-
-    private static InputValidationException unknownReference(String field, String message) {
-        return new InputValidationException(field, "UNKNOWN_REFERENCE", message);
     }
 }

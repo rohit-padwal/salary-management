@@ -18,7 +18,6 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.SourceType;
-import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
 @Table(name = "employees")
@@ -57,20 +56,39 @@ class Employee {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @UpdateTimestamp(source = SourceType.DB)
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     protected Employee() {
     }
 
-    Employee(EmployeeInput input, Department department, Country country, Currency currency, BigDecimal salary) {
-        employeeNumber = input.employeeNumber();
-        fullName = input.fullName();
-        this.department = department;
-        this.country = country;
-        this.currency = currency;
-        salaryAmount = salary;
+    Employee(ResolvedEmployeeData data, Instant changedAt) {
+        replaceWith(data, changedAt);
+    }
+
+    void requireVersion(long originalVersion) {
+        if (version != originalVersion) {
+            throw new StaleEmployeeException();
+        }
+    }
+
+    boolean hasSameDetails(ResolvedEmployeeData data) {
+        return employeeNumber.equals(data.input().employeeNumber())
+                && fullName.equals(data.input().fullName())
+                && department.getId().equals(data.department().getId())
+                && country.getCode().equals(data.country().getCode())
+                && currency.getCode().equals(data.currency().getCode())
+                && salaryAmount.compareTo(data.salary()) == 0;
+    }
+
+    void replaceWith(ResolvedEmployeeData data, Instant changedAt) {
+        employeeNumber = data.input().employeeNumber();
+        fullName = data.input().fullName();
+        department = data.department();
+        country = data.country();
+        currency = data.currency();
+        salaryAmount = data.salary();
+        updatedAt = changedAt;
     }
 
     EmployeeResult toResult() {

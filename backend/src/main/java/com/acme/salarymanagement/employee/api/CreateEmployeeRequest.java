@@ -1,7 +1,7 @@
 package com.acme.salarymanagement.employee.api;
 
 import com.acme.salarymanagement.api.PositiveId;
-import com.acme.salarymanagement.employee.CreateEmployeeCommand;
+import com.acme.salarymanagement.employee.EmployeeDetails;
 import jakarta.validation.constraints.NotBlank;
 
 record CreateEmployeeRequest(
@@ -12,8 +12,8 @@ record CreateEmployeeRequest(
         @NotBlank String salaryAmount,
         @NotBlank String currencyCode) {
 
-    CreateEmployeeCommand toCommand() {
+    EmployeeDetails toCommand() {
         long id = PositiveId.parse(departmentId, "departmentId", "Department ID");
-        return new CreateEmployeeCommand(employeeNumber, fullName, id, countryCode, salaryAmount, currencyCode);
+        return new EmployeeDetails(employeeNumber, fullName, id, countryCode, salaryAmount, currencyCode);
     }
 }

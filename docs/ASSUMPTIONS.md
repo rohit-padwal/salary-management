@@ -31,7 +31,7 @@ Spring Security is implemented for single-account session login/logout, protecte
 
 The approved backend bootstrap uses Java 21, Spring Boot 4.1.1, Spring MVC, Maven Wrapper 3.9.11, and Boot's managed JUnit Jupiter 6/Mockito test starter. JUnit 6 replaces the original JUnit 5 preference with user approval. Explicitly select Java 21 through `JAVA_HOME` because the local global Maven otherwise uses Java 25. No global tooling or shell-profile changes are needed.
 
-The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. PostgreSQL JDBC/Flyway integration, Spring Data JPA, framework-free employee-creation validation, and Spring Security 7.1.1 are implemented. Hibernate validates the schema; Open Session in View is disabled. Jakarta Bean Validation checks required fields on the implemented employee-creation HTTP endpoint. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
+The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. PostgreSQL JDBC/Flyway integration, Spring Data JPA, framework-free employee validation, and Spring Security 7.1.1 are implemented. Hibernate validates the schema; Open Session in View is disabled. Jakarta Bean Validation checks required fields on employee creation/editing HTTP endpoints. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
 
 ## Approved Data Model Decisions
 
@@ -39,7 +39,7 @@ The user approved [DATA_MODEL.md](DATA_MODEL.md): four tables (`employees`, `dep
 
 Employee management owns the employee entity/repository; compensation owns monetary rules; employee application services coordinate combined updates atomically; analytics owns read-only projections. One employee version supports optimistic locking; the API requires the original browser-edit version in each full update and reports stale edits as `409`.
 
-The first employee feature creates validated records through an application service and authenticated/CSRF-protected `POST /api/v1/employees`. It uses read-only reference mappings, validates currency precision before persistence, and relies on the unique constraint for race-safe employee-number conflicts. Names are limited by Unicode code points, matching PostgreSQL character counting; null characters are rejected because PostgreSQL text cannot store them. Dedicated HTTP DTOs map typed application values to the string contract. Database-sourced Hibernate timestamp mappings are accepted; editing/stale-form behavior is still pending.
+Employee creation and full editing use shared normalization/reference/salary validation and precise unique-constraint translation. Names are limited by Unicode code points, matching PostgreSQL character counting; null characters are rejected because PostgreSQL text cannot store them. Dedicated HTTP DTOs map typed application values to the string contract. Creation time is database-generated through Hibernate; write services set latest-change time from PostgreSQL's transaction clock. There is no salary history or individual audit attribution.
 
 Start with primary-key/uniqueness indexes and employee indexes on `(department_id, id)` and `(country_code, id)`. Finalize other indexes against query contracts and measurements. Do not assume B-tree indexes accelerate arbitrary name substring searches. Use a unique ID as the final sort tie-breaker.
 
@@ -59,13 +59,15 @@ Employee creation is implemented through HTTP. Strict JSON rejects non-string va
 
 Employee retrieval by ID is implemented through an authenticated GET with no CSRF header requirement. It reuses the employee response DTO and maps results inside a read-only query service transaction. Lookup labels are fetched with the employee through an entity graph. A valid missing ID returns `404 EMPLOYEE_NOT_FOUND`; malformed/nonpositive/out-of-range IDs return field validation errors. Shared positive-ID parsing accepts ASCII digits/leading zeros and rejects signs or surrounding whitespace. Reads preserve salary, version, and timestamps.
 
-Employee listing/editing and reference-data/analytics HTTP endpoints remain approved contracts awaiting implementation. Listing/analytics queries and production runtime verification remain later steps.
+Full editing is implemented at `PUT /api/v1/employees/{id}`, requiring six editable string fields and the original nonnegative integer-string version. The service checks the original version and uses optimistic locking through commit. Effective changes advance server-managed version/update time; unchanged normalized submissions preserve metadata but can still conflict with a concurrent writer. Missing targets return `404`, stale edits `409 STALE_EMPLOYEE`, and duplicate numbers a separate `409`. Validation/conflict failures roll back the replacement. No automatic retry or upsert is performed. These behaviors were approved for this step; frontend form preservation/reload remains future UI work.
+
+Employee listing and reference-data/analytics HTTP endpoints remain approved contracts awaiting implementation. Listing/analytics queries and production runtime verification remain later steps.
 
 ## Questions Awaiting Resolution
 
 **Incubyte clarification:** salary definition and components; required analytics and currency conversion; salary history; CSV import/export; authentication and access expectations; deployment requirements. The assessment says "AngularJS for Java"; modern Angular acceptance remains unconfirmed.
 
-**Before affected implementation:** any additional HR business salary maximum if required; frontend tool versions; exact query/index plans and consistent-snapshot implementation; application maintenance of update timestamps; environment-specific deployment/security configuration; hosting constraints; and measurable performance targets. These are open implementation/product details, not extra features to add automatically. Local PostgreSQL is provided by Compose; a native PostgreSQL installation is not required.
+**Before affected implementation:** any additional HR business salary maximum if required; frontend tool versions; listing/analytics query/index plans and consistent-snapshot implementation; environment-specific deployment/security configuration; hosting constraints; and measurable performance targets. These are open implementation/product details, not extra features to add automatically. Local PostgreSQL is provided by Compose; a native PostgreSQL installation is not required.
 
 ## Future Expansion and Trade-offs
 
