@@ -1,14 +1,198 @@
 <div class="page-heading">
   <p class="eyebrow">Compensation insights</p>
   <h1>Compensation analytics</h1>
-  <p class="page-description">Explore compensation by department, country and currency.</p>
+  <p class="page-description">
+    Review current gross annual base salaries by department, country, and currency.
+  </p>
 </div>
 
-<section class="placeholder-panel" aria-labelledby="analytics-heading">
-  <p class="panel-label">Salary analytics</p>
-  <h2 id="analytics-heading">Compare compensation with context.</h2>
-  <p>
-    Salary summaries will be available here, grouped by department or country and kept separate by
-    currency.
+<section class="analytics-panel" aria-labelledby="report-filters-heading">
+  <h2 id="report-filters-heading">Choose your report</h2>
+  <form [formGroup]="form" (ngSubmit)="applyQuery()">
+    <div class="query-controls">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Search employees</mat-label>
+        <input matInput name="q" formControlName="q" type="search" autocomplete="off" />
+        <mat-hint>Search by name or employee number. Up to 200 characters.</mat-hint>
+        @if (form.controls.q.hasError('searchTooLong')) {
+          <mat-error>Search must contain at most 200 characters.</mat-error>
+        }
+        @if (form.controls.q.hasError('invalidSearch')) {
+          <mat-error>Search cannot contain a null character.</mat-error>
+        }
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Group salaries by</mat-label>
+        <select matNativeControl name="groupBy" formControlName="groupBy">
+          <option value="department">Department</option>
+          <option value="country">Country</option>
+        </select>
+      </mat-form-field>
+    </div>
+    @let lookup = catalogState();
+    @if (lookup.kind === 'loading') {
+      <p role="status">Loading filter options…</p>
+    } @else if (lookup.kind === 'error') {
+      <div class="report-alert">
+        <p role="alert">{{ lookup.message }}</p>
+        <button matButton="tonal" type="button" (click)="retryCatalogs()">Retry filters</button>
+      </div>
+    }
+    <fieldset class="catalog-filters" [disabled]="lookup.kind !== 'loaded'">
+      <legend class="visually-hidden">Employee filters</legend>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Department</mat-label>
+        <select matNativeControl name="departmentId" formControlName="departmentId">
+          <option value="">All departments</option>
+          @for (department of catalogs()?.departments ?? []; track department.id) {
+            <option [value]="department.id">{{ department.name }}</option>
+          }
+        </select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Country</mat-label>
+        <select matNativeControl name="countryCode" formControlName="countryCode">
+          <option value="">All countries</option>
+          @for (country of catalogs()?.countries ?? []; track country.code) {
+            <option [value]="country.code">{{ country.name }} ({{ country.code }})</option>
+          }
+        </select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Currency</mat-label>
+        <select matNativeControl name="currencyCode" formControlName="currencyCode">
+          <option value="">All currencies</option>
+          @for (currency of catalogs()?.currencies ?? []; track currency.code) {
+            <option [value]="currency.code">{{ currency.code }} — {{ currency.name }}</option>
+          }
+        </select>
+      </mat-form-field>
+    </fieldset>
+    <p class="query-help">
+      Apply updates grouping and all filters together. Country and salary currency are independent.
+    </p>
+    <div class="query-actions">
+      <button matButton="filled" type="submit">Apply</button>
+      <button matButton type="button" (click)="resetQuery()">Reset</button>
+    </div>
+  </form>
+</section>
+
+<section
+  class="report-results"
+  aria-labelledby="report-heading"
+  [attr.aria-busy]="state().kind === 'loading'"
+>
+  <h2 id="report-heading">Compensation report</h2>
+  <p class="applied-criteria">{{ appliedCriteria() }}</p>
+  <p class="report-note">
+    Amounts are shown in their recorded currency. Monetary totals stay separate by currency; no
+    exchange-rate conversion is applied.
   </p>
+  @let result = state();
+  @switch (result.kind) {
+    @case ('loading') {
+      <p role="status">Loading compensation analytics…</p>
+    }
+    @case ('error') {
+      <div class="report-alert">
+        <p role="alert">{{ result.message }}</p>
+        <button matButton="tonal" type="button" (click)="retry()">Retry report</button>
+      </div>
+    }
+    @case ('loaded') {
+      @let report = result.report;
+      <p class="headcount" role="status">
+        <strong>{{ report.totalHeadcount }}</strong> matching employees
+      </p>
+      @if (report.totalHeadcount === 0) {
+        <div class="empty-state">
+          @if (hasFilters()) {
+            <h3>No matching employees</h3>
+            <p>Change the search or filters, or reset the report.</p>
+          } @else {
+            <h3>No salary data yet</h3>
+            <p>Add employee salary records to see compensation insights.</p>
+          }
+        </div>
+      } @else {
+        <h3 class="section-heading">Salary summaries by currency</h3>
+        <div class="currency-summaries">
+          @for (summary of report.currencySummaries; track summary.currencyCode) {
+            <article
+              class="currency-card"
+              [attr.aria-label]="summary.currencyCode + ' salary summary'"
+            >
+              <h4>{{ summary.currencyCode }}</h4>
+              <p class="currency-headcount">{{ summary.headcount }} employees</p>
+              <dl>
+                <div class="total">
+                  <dt>Total annual base salary</dt>
+                  <dd>{{ summary.totalSalary }}</dd>
+                </div>
+                <div>
+                  <dt>Average salary</dt>
+                  <dd>{{ summary.averageSalary }}</dd>
+                </div>
+                <div>
+                  <dt>Minimum salary</dt>
+                  <dd>{{ summary.minSalary }}</dd>
+                </div>
+                <div>
+                  <dt>Maximum salary</dt>
+                  <dd>{{ summary.maxSalary }}</dd>
+                </div>
+              </dl>
+            </article>
+          }
+        </div>
+        <h3 class="section-heading">By {{ report.groupBy }}</h3>
+        <p class="report-note">
+          Each row represents one {{ report.groupBy }} and currency. Averages are rounded to the
+          currency’s decimal places.
+        </p>
+        <div
+          class="table-scroll"
+          role="region"
+          aria-label="Compensation breakdown. Scroll horizontally to view all columns."
+          tabindex="0"
+        >
+          <table>
+            <caption class="visually-hidden">
+              Gross annual base salary by
+              {{
+                report.groupBy
+              }}, with separate rows for each currency.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">
+                  {{ report.groupBy === 'department' ? 'Department' : 'Country' }}
+                </th>
+                <th scope="col">Currency</th>
+                <th scope="col" class="numeric">Employees</th>
+                <th scope="col" class="numeric">Total salary</th>
+                <th scope="col" class="numeric">Average salary</th>
+                <th scope="col" class="numeric">Minimum salary</th>
+                <th scope="col" class="numeric">Maximum salary</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (group of report.groups; track group.groupKey + ':' + group.currencyCode) {
+                <tr>
+                  <th scope="row">{{ group.groupLabel }}</th>
+                  <td>{{ group.currencyCode }}</td>
+                  <td class="numeric">{{ group.headcount }}</td>
+                  <td class="numeric">{{ group.totalSalary }}</td>
+                  <td class="numeric">{{ group.averageSalary }}</td>
+                  <td class="numeric">{{ group.minSalary }}</td>
+                  <td class="numeric">{{ group.maxSalary }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  }
 </section>

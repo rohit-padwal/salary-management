@@ -7,6 +7,7 @@ import { of } from 'rxjs';
 import { SessionService } from './auth/session-service';
 import { EmployeeApi } from './employees/employee-api';
 import { ReferenceDataApi } from './reference-data/reference-data-api';
+import { CompensationApi } from './analytics/compensation-api';
 
 describe('Application navigation', () => {
   let fixture: ComponentFixture<App>;
@@ -17,6 +18,13 @@ describe('Application navigation', () => {
       imports: [App],
       providers: [
         ...appConfig.providers,
+        {
+          provide: CompensationApi,
+          useValue: {
+            get: () =>
+              of({ groupBy: 'department', totalHeadcount: 0, currencySummaries: [], groups: [] }),
+          },
+        },
         {
           provide: SessionService,
           useValue: { restore: () => of({ username: 'hr' }), user: signal({ username: 'hr' }) },

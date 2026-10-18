@@ -1,6 +1,6 @@
 # Salary Management Frontend
 
-Angular 22.2.3 application foundation using standalone components, routing, strict TypeScript/templates, zoneless change detection, and typed HttpClient providers. The responsive shell includes the employee directory, an analytics placeholder, active navigation, page titles, a skip link, and a recoverable not-found page. Login, session restoration, protected navigation, and logout are implemented. Department/country/currency filters and server sorting controls are implemented. Employee creation and version-checked editing are implemented; analytics reporting remains a later step.
+Angular 22.2.3 application foundation using standalone components, routing, strict TypeScript/templates, zoneless change detection, and typed HttpClient providers. The responsive shell includes the employee directory, a compensation analytics dashboard, active navigation, page titles, a skip link, and a recoverable not-found page. Login, session restoration, protected navigation, and logout are implemented. Department/country/currency filters and server sorting controls are implemented. Employee creation and version-checked editing are implemented; compensation analytics reporting is implemented.
 
 ## Setup
 
@@ -29,7 +29,7 @@ npm start
 
 ## Development
 
-Open `http://127.0.0.1:4200`. The configured development proxy forwards `/api` and nested API paths to `http://127.0.0.1:8080`, preserving the browser origin for session/CSRF integration. Start the backend separately with the `local` profile and the configured HR account described in the main setup guide. Opening a protected route without a session shows `/login`. Sign in with that configured account; credentials are not supplied by the frontend. The employee directory, creation/editing form, and authentication use real APIs; the analytics page remains a placeholder. Restart the development server after changing `proxy.conf.json`.
+Open `http://127.0.0.1:4200`. The configured development proxy forwards `/api` and nested API paths to `http://127.0.0.1:8080`, preserving the browser origin for session/CSRF integration. Start the backend separately with the `local` profile and the configured HR account described in the main setup guide. Opening a protected route without a session shows `/login`. Sign in with that configured account; credentials are not supplied by the frontend. The employee directory, creation/editing form, and authentication use real APIs; the analytics dashboard also reads real compensation reports. Restart the development server after changing `proxy.conf.json`.
 
 `npm test` runs the CLI-managed Vitest suite once; `npm run test:watch` watches changes. `npm run format` formats frontend files. The production build writes to ignored `dist/salary-management-ui/browser`; packaging those assets with Spring Boot is a later step.
 
@@ -58,6 +58,16 @@ Select an employee name in the directory or open protected `/employees/:id/edit`
 A stale/unknown conflict, missing update target, or unconfirmed response preserves the draft and blocks further saves. **Discard draft and load latest** explicitly warns that entries will be replaced; fields and version change only after a successful read. A failed reload preserves the draft for another attempt. Duplicate numbers and ordinary validation/CSRF errors remain correctable without changing the original version. No automatic retry, version replacement, or merge occurs. Leaving/reloading/session redirection discards the draft; no navigation-away guard or persistent draft storage is included.
 
 Unit/HTTP tests cover original versions beyond JavaScript's safe integer range, exact transport, validation, duplicate submissions, stale recovery, failed reads/reloads, no-change saves, route reuse, and safe errors. Real Chrome checks against isolated PostgreSQL exercise two-tab stale edits, explicit recovery, exact salary updates, a committed-but-lost response, CSRF rejection/manual retry, Cancel, session expiry, and narrow layouts. The creation browser workflow is also checked after sharing the form. Only temporary seeded data is changed and removed afterward.
+
+## Compensation Analytics
+
+Protected `/analytics` uses `analytics/compensation-api` and readonly DTOs for the existing authenticated GET contract. The report shows overall matching headcount, one salary summary card per currency, and a department/country table with per-currency headcount, total, average, minimum, and maximum. All monetary values and department keys stay strings, including aggregate totals beyond employee storage limits. Rendering never converts money through Number, pipes that coerce to numbers, or client-side arithmetic; server rounding/ordering remain authoritative. The overall headcount can span currencies; no monetary total does.
+
+A typed Reactive Form submits grouping and name/number search plus independent department/country/currency filters together on Apply/Enter. Shared employee-search validation enforces the same Unicode length/null-character rules as the directory. Reset restores department grouping/all employees. Applied criteria remain visible while draft controls change; Retry report retains the applied query. Requests use switchMap and lifecycle teardown to cancel obsolete reads. Loading/failure clears previous results, empty/no-match states are distinct, and raw server error messages are never rendered. Catalog errors have an independent retry; reports, search, and grouping remain usable. Empty catalogs remain empty. No pagination/sort parameters, employee-record reads for aggregation, CSRF initialization, or write requests are sent by the report service.
+
+Cards reflow on narrow screens, and the table uses a caption, scoped headers, and a focusable horizontal scrolling region. Automated UI/HTTP tests cover exact values, grouping/filter submission, draft/applied state, retries/cancellation, validation, empty data, and safe errors. Real Chrome against isolated PostgreSQL seeded with 10,000 employees compares all department/country report values against an independent SQL/Decimal calculation, checks filter totals against the directory, and exercises lookup/report failures, expiry, and 320–1440px layouts. The seeded employee fingerprint remains unchanged. Browser tooling stays local; application dependencies and backend contracts are unchanged.
+
+Query state is memory-only and resets on leaving/reloading; URL parameters are not restored into controls. Reports refresh through Apply or Reset rather than polling. Charts, export, historical reporting, and currency conversion require separate approval.
 
 ## Authentication
 

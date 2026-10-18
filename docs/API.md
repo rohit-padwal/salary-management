@@ -168,6 +168,8 @@ Service groups are ordered by numeric department ID or country code ascending, t
 
 An empty result returns `totalHeadcount: 0`, `currencySummaries: []`, and `groups: []`. Omit unrepresented groups rather than inventing zero-valued salary statistics. Unknown grouping/filter values return `400`. There is no exchange-rate conversion.
 
+The Angular `/analytics` dashboard consumes this endpoint through `CompensationApi`: explicit Apply/Enter combines grouping, literal search, and catalog filters; Reset restores department/all employees. It renders the returned headcount, per-currency summary cards, and group rows directly, preserving exact monetary strings and server ordering. Applied criteria stay separate from draft controls; independent report/catalog retries and cancellation prevent stale displays. No new API parameters, money calculations, conversion, or write requests are introduced.
+
 ## Session and CSRF Contract
 
 | Method and path | Behavior |
@@ -183,7 +185,7 @@ The authentication cookie is HTTP-only, secure over HTTPS in deployment, and use
 
 For Angular integration, use a separate readable `XSRF-TOKEN` cookie and the `X-XSRF-TOKEN` request header. The CSRF endpoint must actually issue/materialize the token even though its response body is empty. The authentication cookie must remain inaccessible to JavaScript.
 
-The Angular client now implements login/session/logout using relative same-origin URLs and built-in XSRF handling. It obtains a CSRF token before login/logout and refreshes it afterward; a failed anonymous-token refresh after completed logout does not undo that logout. Login form passwords are cleared after submission; localStorage/sessionStorage persistence is not used. Protected route activation checks the server session, and non-auth API 401 responses redirect to login without replaying writes. Employee directory/creation/editing workflows consume these endpoints; analytics UI reporting remains a later step.
+The Angular client now implements login/session/logout using relative same-origin URLs and built-in XSRF handling. It obtains a CSRF token before login/logout and refreshes it afterward; a failed anonymous-token refresh after completed logout does not undo that logout. Login form passwords are cleared after submission; localStorage/sessionStorage persistence is not used. Protected route activation checks the server session, and non-auth API 401 responses redirect to login without replaying writes. Employee directory/creation/editing workflows consume these endpoints; analytics UI reporting consumes the existing compensation endpoint.
 
 The client obtains a CSRF token before login or other mutating requests and refreshes it after successful login and logout. Spring must validate tokens for state-changing requests, including login/logout. Security-filter failures use the same problem response format as controller errors. A missing/invalid CSRF token can produce `403` before controller processing; the UI must not treat every `403` as bad credentials.
 

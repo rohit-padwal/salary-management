@@ -17,6 +17,7 @@ import {
   SortDirection,
 } from './employee';
 import { EmployeeApi } from './employee-api';
+import { employeeSearchValidator } from './employee-search-validation';
 import { ReferenceDataApi } from '../reference-data/reference-data-api';
 import { ReferenceData } from '../reference-data/reference-data';
 
@@ -29,12 +30,6 @@ type CatalogState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'loaded'; readonly data: ReferenceData }
   | { readonly kind: 'error'; readonly message: string };
-
-const searchValidator: ValidatorFn = (control) => {
-  const value = (control.value as string).trim();
-  if (Array.from(value).length > 200) return { searchTooLong: true };
-  return value.includes('\0') ? { invalidSearch: true } : null;
-};
 
 const salarySortValidator: ValidatorFn = (form) =>
   form.get('sortField')?.value === 'salaryAmount' && !form.get('currencyCode')?.value
@@ -64,7 +59,7 @@ export class EmployeesPage {
   protected readonly query = signal(this.requests.value);
   protected readonly search = new FormControl('', {
     nonNullable: true,
-    validators: searchValidator,
+    validators: employeeSearchValidator,
   });
   protected readonly form = new FormGroup(
     {
