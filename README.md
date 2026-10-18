@@ -4,7 +4,7 @@ Employee salary management for an HR Manager overseeing 10,000 employees across 
 
 ## Current Status
 
-The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup and server-side paginated employee search with department/country/currency filters and allowlisted sorting are also available. Analytics endpoints, employee seeding, and the Angular UI remain planned.
+The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup and server-side paginated employee search with department/country/currency filters and allowlisted sorting are also available. Compensation analytics calculations are implemented as a Java service. The analytics HTTP endpoint, employee seeding, and the Angular UI remain planned.
 
 ## Backend Toolchain
 
@@ -187,6 +187,14 @@ Success returns `200` with the updated employee. An effective change advances it
 
 Invalid input returns `400`, a missing target `404`, a duplicate number `409 EMPLOYEE_NUMBER_CONFLICT`, and an outdated version/concurrent edit `409 STALE_EMPLOYEE`. Invalid or conflicting updates leave the employee unchanged. Reload after a stale conflict rather than retrying with an overwritten version. PUT does not create missing records or provide salary history.
 
+## Compensation Analytics Service
+
+`CompensationAnalyticsService` supports department/country grouping with the same search and catalog filters as employee listing. It returns typed application results with headcount and separate-currency group/summary statistics. The HTTP endpoint, request parser, and JSON DTOs remain a separate implementation step.
+
+PostgreSQL calculates group counts, sums, minimums, and maximums in one statement. Java combines only those aggregate rows into currency summaries and computes averages from exact totals/counts, rounding once with `HALF_EVEN` at currency precision. Totals/minimums/maximums remain exact, and totals may exceed the per-employee storage limit. No monetary total spans currencies. Empty results contain zero headcount and empty collections.
+
+Both result levels come from the same captured group rows, including when another transaction changes salaries afterward. Groups are ordered by numeric department ID or country code, then currency code; currency summaries are ordered by currency code. The implementation uses existing JDBC support and shared employee read criteria/catalog validation, without schema changes or new dependencies.
+
 ## Verification and Testing
 
 The migration suite checks fresh setup, repeat migration/validation, reference data, exact decimal storage, required values, unique identifiers, invalid salaries, reference integrity, and protected lookup deletion. Each test rolls back its changes; its disposable database is separate from the persistent development database.
@@ -200,6 +208,8 @@ Security unit tests reject missing/plaintext/malformed account configuration and
 Creation and effective updates obtain latest-change metadata from PostgreSQL's transaction clock. JPA manages the version; the client-supplied version is only a precondition. Unchanged submissions perform no employee write. Tests use disposable databases and do not reset development data.
 
 `ReferenceDataApiIT` verifies the real HTTP response against PostgreSQL: complete ordered catalogs, exact JSON types, large string IDs, Unicode names, current database metadata, empty catalogs, authentication, GET without CSRF, unsupported media types, and rejection of catalog writes. It resets only its own disposable database between cases.
+
+`CompensationRollupTest` checks weighted averages, avoiding rounded subgroup-average reuse, currency precision and `HALF_EVEN` boundaries, large totals, currency separation, and empty data. `CompensationAnalyticsIT` verifies both grouping dimensions against independent expected values, listing/filter/search parity, exact large IDs, PostgreSQL aggregation returning groups rather than employee entities, zero writes, and a coordinated writer committing between aggregation and rollup. Its 1,000-row fixture is an isolated query-shape check, not the production seed script or a workload benchmark.
 
 The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Analytics endpoints and the frontend remain future work.
 

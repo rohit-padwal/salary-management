@@ -1,7 +1,6 @@
 package com.acme.salarymanagement.employee;
 
 import com.acme.salarymanagement.validation.InputValidationException;
-import com.acme.salarymanagement.validation.ReferenceCode;
 
 public record EmployeePageRequest(int page, int size, String q,
         Long departmentId, String countryCode, String currencyCode, EmployeeSort sort) {
@@ -25,33 +24,18 @@ public record EmployeePageRequest(int page, int size, String q,
         if (size < 1 || size > 100) {
             throw new InputValidationException("size", "OUT_OF_RANGE", "Size must be between 1 and 100.");
         }
-        q = normalizeSearch(q);
-        if (departmentId != null && departmentId <= 0) {
-            throw new InputValidationException("departmentId", "MUST_BE_POSITIVE", "Select a supported department.");
-        }
-        if (countryCode != null) {
-            countryCode = ReferenceCode.normalize(countryCode, "countryCode", 2);
-        }
-        if (currencyCode != null) {
-            currencyCode = ReferenceCode.normalize(currencyCode, "currencyCode", 3);
-        }
+        EmployeeReadCriteria criteria = new EmployeeReadCriteria(q, departmentId, countryCode, currencyCode);
+        q = criteria.q();
+        departmentId = criteria.departmentId();
+        countryCode = criteria.countryCode();
+        currencyCode = criteria.currencyCode();
         sort = sort == null ? EmployeeSort.DEFAULT : sort;
         if (sort.field() == EmployeeSort.Field.SALARY_AMOUNT && currencyCode == null) {
             throw new InputValidationException("sort", "CURRENCY_REQUIRED", "Select a currency before sorting by salary.");
         }
     }
 
-    private static String normalizeSearch(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.strip();
-        if (normalized.codePointCount(0, normalized.length()) > 200) {
-            throw new InputValidationException("q", "TOO_LONG", "Search must contain at most 200 characters.");
-        }
-        if (normalized.indexOf('\0') >= 0) {
-            throw new InputValidationException("q", "INVALID_FORMAT", "Search cannot contain a null character.");
-        }
-        return normalized.isEmpty() ? null : normalized;
+    public EmployeeReadCriteria criteria() {
+        return new EmployeeReadCriteria(q, departmentId, countryCode, currencyCode);
     }
 }

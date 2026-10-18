@@ -71,13 +71,15 @@ Department/country/currency filters are implemented and combined with AND around
 
 Allowlisted sorting is implemented through optional `sort=field,direction`: the six approved fields and exact lowercase `asc`/`desc`, defaulting to `employeeNumber,asc`. Names are case-sensitive; blank, malformed, unknown, or repeated sort values return field errors. Typed values map to fixed JPA properties; ID ascending is always the final tie-breaker, including for descending primary order. Text order follows database collation. Salary sort requires an explicit supported currency filter, including when no employees match; invalid provided currencies remain currency field errors. No conversion, dependency, schema change, or new index was added.
 
-Analytics remains an approved contract awaiting implementation. Query/index measurement, the 10,000-employee seed, and production runtime verification remain later steps.
+The analytics service and grouped PostgreSQL read are implemented. A shared `EmployeeReadCriteria` and catalog validator preserve listing normalization/escaping/filter semantics; listing page/sort behavior remains separate. One grouped SQL statement produces counts, exact totals/minimums/maximums and currency metadata. Java derives currency summaries from those captured aggregate rows and rounds averages once from exact totals/counts. No cross-currency monetary result or per-employee-range cap is applied to totals. Groups order by numeric department ID or country code, then currency; summaries order by currency. A coordinated write-after-read test verifies both result levels retain the grouped read.
+
+The analytics HTTP contract remains awaiting implementation: parameter parsing, string DTOs, controller, and endpoint access tests are not supplied by the service step. Query/index measurement, the 10,000-employee seed, and production runtime verification remain later steps.
 
 ## Questions Awaiting Resolution
 
 **Incubyte clarification:** salary definition and components; required analytics and currency conversion; salary history; CSV import/export; authentication and access expectations; deployment requirements. The assessment says "AngularJS for Java"; modern Angular acceptance remains unconfirmed.
 
-**Before affected implementation:** any additional HR business salary maximum if required; frontend tool versions; listing/analytics query/index plans and consistent-snapshot implementation; environment-specific deployment/security configuration; hosting constraints; and measurable performance targets. These are open implementation/product details, not extra features to add automatically. Local PostgreSQL is provided by Compose; a native PostgreSQL installation is not required.
+**Before affected implementation:** any additional HR business salary maximum if required; frontend tool versions; query/index workload measurements and analytics HTTP integration; environment-specific deployment/security configuration; hosting constraints; and measurable performance targets. These are open implementation/product details, not extra features to add automatically. Local PostgreSQL is provided by Compose; a native PostgreSQL installation is not required.
 
 ## Future Expansion and Trade-offs
 

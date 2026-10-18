@@ -1,6 +1,6 @@
 # API Contracts and Business Rules
 
-**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`), retrieval/editing (`GET`/`PUT /api/v1/employees/{id}`), reference-data lookup (`GET /api/v1/reference-data`), and authentication/session/CSRF endpoints are implemented and tested. Paginated employee search, department/country/currency filtering, and allowlisted sorting are implemented; analytics remains unimplemented. Analytics paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
+**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`), retrieval/editing (`GET`/`PUT /api/v1/employees/{id}`), reference-data lookup (`GET /api/v1/reference-data`), and authentication/session/CSRF endpoints are implemented and tested. Paginated employee search, department/country/currency filtering, and allowlisted sorting are implemented; the analytics calculation service is implemented, while its HTTP endpoint remains unimplemented. Analytics paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
 
 ## Conventions
 
@@ -141,6 +141,8 @@ These are the supported catalogs used by forms, filters, and validation. They ar
 
 ## Compensation Analytics
 
+**Implementation status:** The Java service, shared filter rules, PostgreSQL group query, and calculation/integration tests are implemented. The controller, HTTP parameter parsing, JSON DTO mapping, and endpoint-specific security tests remain Step 14B. The HTTP contract below is not an available endpoint yet. Application results carry currency-scaled `BigDecimal` values; the later HTTP mapper must emit the specified decimal strings and lowercase grouping names.
+
 `GET /api/v1/analytics/compensation?groupBy=department`.
 
 `groupBy` accepts `department` or `country`, defaulting to `department`. Accept the same `q`, `departmentId`, `countryCode`, and `currencyCode` filters as listing, with identical normalization and matching. Analytics has no page or sort parameters.
@@ -152,11 +154,13 @@ Return:
 - `currencySummaries`: one entry per represented currency, containing `currencyCode`, `headcount`, `totalSalary`, `averageSalary`, `minSalary`, and `maxSalary`.
 - `groups`: one entry per represented dimension/currency combination, containing the same aggregate fields plus `groupKey` and `groupLabel`. For department grouping the key is the department ID string; for country grouping it is the country code.
 
-Each employee contributes to one dimension/currency group and one currency summary. Never sum or average monetary values across currencies. Overall headcount may span currencies. Produce the response from a consistent database snapshot so summaries and groups agree; the query/transaction implementation is a later concern.
+Each employee contributes to one dimension/currency group and one currency summary. Never sum or average monetary values across currencies. Overall headcount may span currencies. The implemented service reads all dimension/currency groups in one SQL statement and derives summaries from those same captured rows, so the two result levels agree even if a writer commits afterward. No separate summary query is issued.
 
-Use database-side aggregation. Compute averages from exact totals and headcounts, not by averaging rounded subgroup averages. Format monetary strings to the currency's minor units. Round averages once using `HALF_EVEN`; totals, minimums, and maximums remain exact. Do not narrow totals to the per-employee storage range.
+PostgreSQL computes group headcounts, exact sums, minimums, and maximums. Java combines the aggregate rows by currency and computes averages from exact totals and headcounts, never from rounded subgroup averages. Format monetary strings to the currency's minor units. Round averages once using `HALF_EVEN`; totals, minimums, and maximums remain exact. Do not narrow totals to the per-employee storage range.
 
 For example, two salaries of `1000.00` and `1000.01` in a two-decimal currency produce total `2000.01` and displayed average `1000.00` under `HALF_EVEN`. Adding an employee in another currency creates separate monetary groups, not a combined total.
+
+Service groups are ordered by numeric department ID or country code ascending, then currency code ascending. Currency summaries are ordered by currency code. The SQL query keeps department IDs numeric for ordering and converts returned keys to exact strings.
 
 An empty result returns `totalHeadcount: 0`, `currencySummaries: []`, and `groups: []`. Omit unrepresented groups rather than inventing zero-valued salary statistics. Unknown grouping/filter values return `400`. There is no exchange-rate conversion.
 
@@ -232,7 +236,7 @@ Implemented tests cover:
 - Unauthenticated reads, generic login failure, session timeout, CSRF issuance/refresh, login/logout, and consistent security error bodies.
 - Complete ordered reference catalogs, exact string IDs/integer minor units, current database values, empty catalogs, read access without CSRF, and absence of catalog write handlers.
 
-Pagination tests cover defaults, traversal/totals, empty/out-of-range pages, parameter validation, and bounded employee/lookup loading without writes. Search tests cover both fields/OR matching, case conversion, literal wildcards/escapes/quotes, blank normalization, Unicode length, matching totals, and bounded reads. Filter tests cover individual/all combined conditions, OR/AND precedence, normalization and catalog validation, repeated/blank/unknown inputs, filtered totals, and bounded query counts. Sorting tests cover all six fields in both directions through plain/searched listings, ID ties across pages, numeric salary order, currency requirements, malformed/repeated values, access checks, and bounded reads. Independently calculated analytics with separate currencies, empty results, and `HALF_EVEN` rounding remain planned. Their contracts do not imply those features are implemented.
+Pagination tests cover defaults, traversal/totals, empty/out-of-range pages, parameter validation, and bounded employee/lookup loading without writes. Search tests cover both fields/OR matching, case conversion, literal wildcards/escapes/quotes, blank normalization, Unicode length, matching totals, and bounded reads. Filter tests cover individual/all combined conditions, OR/AND precedence, normalization and catalog validation, repeated/blank/unknown inputs, filtered totals, and bounded query counts. Sorting tests cover all six fields in both directions through plain/searched listings, ID ties across pages, numeric salary order, currency requirements, malformed/repeated values, access checks, and bounded reads. Analytics calculation/PostgreSQL tests cover independent totals/groups, separate currencies, exact averages and `HALF_EVEN` rounding, large totals/IDs, empty results, listing filter parity, aggregate-only reads, and a concurrent write after the grouped read. Analytics HTTP serialization/access/query-validation checks remain planned; service implementation does not make that endpoint available.
 
 DTOs and the `/api/v1` boundary allow future evolution. Partial updates, ETags, cursor pagination, additional analytics, history, and RBAC require separately approved contracts. They are not implemented or promised by the current API.
 
