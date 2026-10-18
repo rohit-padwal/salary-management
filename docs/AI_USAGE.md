@@ -44,4 +44,20 @@ This is a concise record of meaningful exchanges, not a complete prompt transcri
 
 ## Pending Clarification and Subsequent Work
 
-Incubyte's reply remains pending according to the user. Review differences explicitly and obtain approval before changing scope or implementation. Step 6 will propose the data model; Step 7 will define API contracts and detailed business rules. Neither is implemented by this documentation step.
+Incubyte's reply remains pending according to the user. Review differences explicitly and obtain approval before changing scope or implementation. Step 7 will define API contracts and remaining business rules; executable migrations, dependencies, and application scaffolding remain later steps.
+
+## Step 6: Data Model Review and Documentation
+
+**User direction:** Continue to data-model review, then approve the presented four-table model and the four-file documentation step.
+
+**AI contribution:** Compared current salary columns with a separate one-to-one salary table and premature history storage. Proposed lookup tables for consistent department/country/currency reporting, exact decimal storage, reference constraints, initial indexes, and clear persistence ownership. Consulted official PostgreSQL, Java currency, and Jakarta Persistence documentation; references are recorded in [DATA_MODEL.md](DATA_MODEL.md).
+
+**Approved decisions:** Store one current salary on the employee row; use `departments`, `countries`, and `currencies` as controlled reference tables; require unique employee numbers and case-insensitive department-name uniqueness; use `NUMERIC(19,4)`/`BigDecimal`, currency-specific precision validation, and explicit non-finite rejection. Add employee version and timestamps, initial department/country filter indexes, and a unique pagination sort tie-breaker. Employee services coordinate atomic changes; compensation owns monetary rules; analytics remains read-only.
+
+**Correctness findings:** A fixed numeric scale can round excess precision, so validate before database coercion. A positive-value check alone does not exclude PostgreSQL `NaN`. JPA versioning must be paired with checking the version originally edited by the browser; loading the latest row on submission alone does not prevent stale-form overwrites.
+
+**Trade-offs retained:** No salary-history table, audit trail, lookup-management UI, or trigger-based precision framework. Timestamp/version metadata is not history. Lookup records and detailed API rules remain to be finalized. The schema supports up to four fractional digits; broader requirements would require a policy/schema review.
+
+**Authorized changes:** Create `DATA_MODEL.md` and update `ARCHITECTURE.md`, `ASSUMPTIONS.md`, and this record. The requirements baseline, API design, executable migrations, database setup, and application code are outside this step.
+
+**Actual verification:** Python checks passed for local links, whitespace, final newlines, code fences, table columns, secret patterns, required model sections, and exactly the four approved documentation changes. The requirements baseline remained byte-for-byte unchanged at 401 words. `git diff --check` passed. No database/application tests or builds ran because no executable implementation exists. Git outcomes are reported from actual commands in the completion report.

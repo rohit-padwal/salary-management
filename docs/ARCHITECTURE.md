@@ -28,9 +28,9 @@ Prefer Java 21, Spring Boot, Spring Web MVC, Spring Data JPA, Jakarta Bean Valid
 | Security | Authentication, sessions, and access enforcement | Application code must not rely on frontend guards as authorization. |
 | Infrastructure | Persistence configuration, migrations, seeding, and operational configuration | Supplies technical integration without becoming a general-purpose business module. |
 
-Employee and compensation responsibilities may participate in the same use case and transaction. Step 6 will decide table relationships and persistence ownership. These logical boundaries do not imply separate compensation tables or HTTP endpoints.
+The approved [data model](DATA_MODEL.md) uses `employees`, `departments`, `countries`, and `currencies`. Current salary fields belong to the employee record; employee management owns its entity and repository, while compensation owns salary validation/change rules. Employee application services coordinate combined changes in one transaction. Logical boundaries do not require a separate compensation table or endpoint.
 
-Analytics may query the application's employee/compensation tables through dedicated read projections. We accept internal schema coupling to keep reporting efficient and straightforward. Persistence changes must therefore review affected analytics queries and tests. Controllers should not reach into another feature's repositories; cross-feature business coordination belongs in services.
+Analytics may query employees and their reference tables through dedicated read projections. We accept internal schema coupling to keep reporting efficient and straightforward. Persistence changes must therefore review affected analytics queries and tests. Controllers should not reach into another feature's repositories; cross-feature business coordination belongs in services.
 
 Within a feature, controllers translate HTTP requests and responses, application services coordinate use cases and transactions, and repositories perform persistence. DTOs define API input/output; do not serialize persistence entities as public contracts. Start with manual mapping for small DTOs. Do not add mapper libraries, service interfaces, or factories without a concrete need.
 
@@ -70,11 +70,11 @@ A shared configured account provides no individual attribution. In-memory sessio
 
 ## Data, Money, and Transactions
 
-Use exact decimal calculations, positive gross annual base salary, and explicit ISO currency codes. Preserve currencies and separate monetary aggregation by currency. Do not infer currency from employment country or introduce conversion rates.
+Use Java `BigDecimal` and PostgreSQL `NUMERIC(19,4)` for positive gross annual base salary with explicit ISO currency codes. Validate currency-specific precision before persistence, because PostgreSQL can round excess scale. Reject non-finite values explicitly. Preserve currencies and separate monetary aggregation by currency. Do not infer currency from employment country or introduce conversion rates.
 
 Paginate and aggregate in PostgreSQL rather than loading the entire dataset into the application or browser. Select indexes from the approved query patterns. Use versioned Flyway migrations and database constraints alongside application validation.
 
-Application services define transaction boundaries for use cases; exact update and conflict-handling rules remain for data/API design. Step 6 will specify tables, keys, relationships, and constraints. Step 7 will specify API contracts, monetary representation across the browser/API boundary, precision, rounding, and validation/error behavior.
+Application services define transaction boundaries for use cases. The employee record has one JPA optimistic-lock version; the API must also check the version originally edited by the client to prevent stale forms overwriting newer data. Required fields, foreign keys, unique employee numbers, case-insensitive department uniqueness, and initial filter indexes are specified in [DATA_MODEL.md](DATA_MODEL.md). Step 7 will define API contracts, monetary representation across the browser/API boundary, analytics rounding, and validation/conflict responses. Executable migrations remain a later approved step.
 
 ## Verification Strategy
 
