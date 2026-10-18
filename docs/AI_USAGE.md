@@ -44,7 +44,7 @@ This is a concise record of meaningful exchanges, not a complete prompt transcri
 
 ## Pending Clarification and Subsequent Work
 
-Incubyte's reply remains pending according to the user. Review differences explicitly and obtain approval before changing scope or implementation. Requirements, architecture, data model, and API contracts are documented project decisions; executable migrations, dependencies, and application scaffolding remain later approved steps.
+Incubyte's reply remains pending according to the user. Review differences explicitly and obtain approval before changing scope or implementation. Requirements, architecture, data model, and API contracts are documented project decisions. The backend bootstrap is implemented; migrations, business features, access control, and the frontend remain later approved steps.
 
 ## Step 6: Data Model Review and Documentation
 
@@ -77,3 +77,27 @@ Incubyte's reply remains pending according to the user. Review differences expli
 **Authorized changes:** Create `API.md`; update `DATA_MODEL.md`, `ARCHITECTURE.md`, `ASSUMPTIONS.md`, and this record. The requirements baseline, application scaffolding, dependencies, database migrations, and runtime resources are outside this step.
 
 **Actual verification:** Python documentation checks passed for local links, whitespace, final newlines, code fences, table columns, secret patterns, required API sections, and exactly the five approved documentation changes. Both JSON examples parsed; the update example uses strings for money/version. An independent Python `Decimal` calculation confirmed total `2000.01` and `HALF_EVEN` average `1000.00` for salaries `1000.00` and `1000.01`. The requirements baseline was byte-for-byte unchanged at 401 words, and `git diff --check` passed. These checks verify the documentation and its arithmetic example, not a running application. No application/database tests or builds ran. Git outcomes are reported from actual commands in the completion report.
+
+## Step 8: Design and Local Tooling Review
+
+**User direction:** Review consistency and remaining setup choices before backend scaffolding.
+
+**Actual findings:** Design documents were consistent enough to initialize the backend; local links and JSON examples checked successfully across six documents. Java 21.0.10 and Maven 3.9.11 were installed, but global Maven defaulted to Java 25. Selecting the installed Java 21 using `JAVA_HOME` made Maven report Java 21. Node/npm and Docker CLI were present; `psql` was not on PATH. No database availability was established. This review changed no files or Git history.
+
+**Version recommendation:** Official Spring Boot documentation and Initializr metadata identified stable Boot 4.1.1 and its JUnit 6 testing stack. The assistant explicitly proposed changing the user's initial JUnit 5 preference, explaining that Boot 3.5's final open-source release had already been announced. The user approved Boot 4.1.1 and managed JUnit 6 before implementation.
+
+## Step 9: Backend Bootstrap
+
+**User direction:** Approve the proposed minimal Spring Boot initialization, dependency downloads, verification, and automatic commit/push.
+
+**Implemented scope:** One Maven project in `backend/`, the `com.acme.salarymanagement` application entry point, Spring MVC, the managed test starter, application-name configuration, and Maven Wrapper pinned to 3.9.11. Root setup/ignore/line-ending files document local use and preserve wrapper portability. Updated design notes describe actual progress; the API status wording was corrected to distinguish the running bootstrap from unimplemented business endpoints.
+
+**AI contribution and decisions:** Used official Spring Initializr sources, selected only the approved foundation files, and omitted the generated empty context test and placeholder project metadata. Explicitly selected Boot artifact version `4.1.1`; Initializr's metadata exposed a legacy `.RELEASE` suffix, which was not used as the Maven parent version. The Maven distribution was checked against its published SHA-512 and a SHA-256 pin was recorded for wrapper verification. No business endpoints, empty feature packages, database/security dependencies, global tools, or shell-profile changes were introduced.
+
+**Actual verification:** `./mvnw -version` reported Maven 3.9.11 running on Temurin Java 21.0.10. With Java 21 explicitly selected, `./mvnw -B -ntp verify` passed, compiling one source file with release 21 and producing the executable JAR. No test sources exist, so zero automated application tests ran. `dependency:tree` confirmed JUnit Jupiter 6.0.3 and Mockito 5.23.0 in test scope.
+
+An independent Python verification checked class-file major version 65 (Java 21), started the packaged JAR on `127.0.0.1` with an ephemeral port, and confirmed HTTP 404 JSON for `/api/v1/employees`. The process was terminated and its temporary startup log removed. This verifies bootstrap packaging/startup, not business or security behavior. README/design local links, JSON examples, code fences, whitespace, POM XML, and the exact two approved direct dependencies checked successfully. The 401-word requirements baseline remained unchanged. `sh -n backend/mvnw` passed; Windows wrapper execution was not tested on this macOS host. Git outcomes are reported from actual commands in the completion report.
+
+**Verification correction:** An initial credential heuristic flagged the upstream wrapper's `${MVNW_PASSWORD:+has-password}` shell parameter expansion. Manual review confirmed a false positive, not a credential value. The assignment heuristic was refined to distinguish credential assignments from shell expansion syntax; the original wrapper code was preserved. The final scope/credential-pattern checks passed for the 13 relevant changed files.
+
+**References:** [Spring Boot system requirements](https://docs.spring.io/spring-boot/system-requirements.html), [Boot testing](https://docs.spring.io/spring-boot/reference/testing/), [Boot 3.5 final OSS release](https://spring.io/blog/2026/06/25/spring-boot-3-5-16-available-now/), [Maven Wrapper](https://maven.apache.org/tools/wrapper/), and [Spring Initializr](https://start.spring.io/).

@@ -1,6 +1,6 @@
 # Architecture and Engineering Decisions
 
-**Status:** Approved project design for the MVP. Incubyte's clarification remains pending; this is not a statement of additional assessment requirements. Application implementation has not started.
+**Status:** Approved project design for the MVP. Incubyte's clarification remains pending; this is not a statement of additional assessment requirements. The backend bootstrap is implemented; business features, database integration, security, and UI remain planned.
 
 ## Context and Goals
 
@@ -16,7 +16,9 @@ Use a modular monolith: one Spring Boot application, an Angular UI, and PostgreS
 | Modular monolith | Clear responsibilities, local calls, straightforward transactions, one deployment | Boundaries depend on code structure and review | Selected for the current scope. |
 | Microservices | Independent deployment and scaling | Network failures, distributed consistency, and operational overhead | No present requirement justifies these costs. |
 
-Prefer Java 21, Spring Boot, Spring Web MVC, Spring Data JPA, Jakarta Bean Validation, PostgreSQL, Flyway, and Maven for the backend; modern Angular, TypeScript, Angular Material, Reactive Forms, and HttpClient for the UI. Spring Security is approved for the access design below. Exact versions, test tooling configuration, dependency installation, and scaffolding require their own approved steps. Modern Angular acceptance remains an external clarification item.
+The backend bootstrap uses Java 21, Spring Boot 4.1.1, Spring MVC, and Maven Wrapper pinned to Maven 3.9.11 under `backend/`, with package `com.acme.salarymanagement`. The test starter follows Boot's managed JUnit Jupiter 6 and Mockito versions; the user approved JUnit 6 in place of the original JUnit 5 preference. The wrapper verifies the Maven distribution with a pinned SHA-256 checksum.
+
+Spring Data JPA, Jakarta Bean Validation, PostgreSQL, Flyway, and Spring Security remain approved architecture choices to add with their implementation steps. Modern Angular, TypeScript, Angular Material, Reactive Forms, and HttpClient remain the frontend direction; version selection and Angular acceptance are still pending. The [README](../README.md) documents Java selection, build, and local execution.
 
 ## Responsibilities and Boundaries
 

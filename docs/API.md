@@ -1,6 +1,6 @@
 # API Contracts and Business Rules
 
-**Status:** Approved MVP project contract, subject to Incubyte clarification. This document describes intended behavior; no endpoints, application code, or executable tests have been implemented.
+**Status:** Approved MVP project contract, subject to Incubyte clarification. The runnable backend bootstrap exists, but the employee, analytics, reference-data, and authentication endpoints described here are not implemented or behaviorally tested.
 
 ## Conventions
 

@@ -29,7 +29,9 @@ Keep clear employee, compensation, analytics, infrastructure, and security respo
 
 Spring Security is approved for single-account session login/logout, protected reads and writes, and CSRF integration with Angular. HTTP-only authentication cookies, secure deployment cookies, and an explicit same-site policy are part of the design. No identity provider, account administration, or advanced RBAC is introduced.
 
-Prefer Java 21, Spring Boot, modern Angular, and PostgreSQL. Version selection, dependency installation, scaffolding, and executable implementation remain separate approval steps. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
+The approved backend bootstrap uses Java 21, Spring Boot 4.1.1, Spring MVC, Maven Wrapper 3.9.11, and Boot's managed JUnit Jupiter 6/Mockito test starter. JUnit 6 replaces the original JUnit 5 preference with user approval. Explicitly select Java 21 through `JAVA_HOME` because the local global Maven otherwise uses Java 25. No global tooling or shell-profile changes are needed.
+
+The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. Database, validation, and security dependencies are deferred to their approved steps. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
 
 ## Approved Data Model Decisions
 
@@ -53,7 +55,7 @@ The API is an approved design contract, not an implemented or tested service. De
 
 **Incubyte clarification:** salary definition and components; required analytics and currency conversion; salary history; CSV import/export; authentication and access expectations; deployment requirements. The assessment says "AngularJS for Java"; modern Angular acceptance remains unconfirmed.
 
-**Before affected implementation:** supported country/currency records and reference display-name lengths; any additional HR business salary maximum if required; framework/tool versions; exact query/index plans and consistent-snapshot implementation; timestamp initialization; environment-specific deployment/security configuration; hosting constraints; and measurable performance targets. These are open implementation/product details, not extra features to add automatically.
+**Before affected implementation:** supported country/currency records and reference display-name lengths; any additional HR business salary maximum if required; frontend/database tool versions; exact query/index plans and consistent-snapshot implementation; timestamp initialization; environment-specific deployment/security configuration; hosting constraints; and measurable performance targets. These are open implementation/product details, not extra features to add automatically. Docker CLI availability does not establish a running database, and `psql` was not on PATH during the setup review.
 
 ## Future Expansion and Trade-offs
 
