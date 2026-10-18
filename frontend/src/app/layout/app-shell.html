@@ -1,0 +1,38 @@
+<a class="skip-link" href="#main-content" (click)="skipToContent($event)">Skip to main content</a>
+
+<header class="app-header">
+  <div class="header-content">
+    <a class="brand" routerLink="/employees" aria-label="Salary Management home">
+      <span class="brand-mark" aria-hidden="true">SM</span>
+      <span class="brand-copy">
+        <span class="brand-name">Salary Management</span>
+        <span class="brand-description">People &amp; compensation</span>
+      </span>
+    </a>
+
+    <nav aria-label="Primary">
+      <a
+        matButton
+        class="nav-link"
+        routerLink="/employees"
+        routerLinkActive="nav-link--active"
+        ariaCurrentWhenActive="page"
+        >Employees</a
+      >
+      <a
+        matButton
+        class="nav-link"
+        routerLink="/analytics"
+        routerLinkActive="nav-link--active"
+        ariaCurrentWhenActive="page"
+        >Analytics</a
+      >
+    </nav>
+  </div>
+</header>
+
+<main #mainContent id="main-content" class="main-content" tabindex="-1">
+  <router-outlet />
+</main>
+
+<footer class="app-footer">Employee Salary Management</footer>

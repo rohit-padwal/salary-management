@@ -4,7 +4,7 @@ Employee salary management for an HR Manager overseeing 10,000 employees across 
 
 ## Current Status
 
-The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup and server-side paginated employee search with department/country/currency filters and allowlisted sorting are also available. Compensation analytics are available through an authenticated JSON endpoint. An explicit seed command loads 10,000 deterministic synthetic employees. The Angular 22.2.3 workspace is initialized with a minimal application heading, routing, strict typing, and tests. Employee, login, and analytics screens remain planned.
+The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup and server-side paginated employee search with department/country/currency filters and allowlisted sorting are also available. Compensation analytics are available through an authenticated JSON endpoint. An explicit seed command loads 10,000 deterministic synthetic employees. The Angular 22.2.3 frontend has a responsive shell, accessible navigation, and routed employee/analytics placeholders. Login, employee data management, and analytics reporting UI remain planned.
 
 ## Project Organization
 
@@ -23,7 +23,7 @@ Backend packages remain grouped by feature under `backend/src/main/java/com/acme
 
 ## Frontend Baseline
 
-The frontend in `frontend/` uses modern Angular/CLI/build tooling **22.2.3**, verified as the latest stable release on 2026-10-18, with Node **24.22.0**, npm **11.19.1**, TypeScript 6.0.x, and a committed dependency lockfile. Material/CDK remain deferred until controls need them. See [frontend setup](frontend/README.md) and [frontend conventions](docs/FRONTEND.md).
+The frontend in `frontend/` uses modern Angular/CLI/build tooling **22.2.3**, verified as the latest stable release on 2026-10-18, with Node **24.22.0**, npm **11.19.1**, TypeScript 6.0.x, and a committed dependency lockfile. Material/CDK 22.2.3 supply navigation controls and the local prebuilt theme. See [frontend setup](frontend/README.md) and [frontend conventions](docs/FRONTEND.md).
 
 With compatible Node selected, run from `frontend/`:
 
@@ -36,6 +36,10 @@ npm start
 ```
 
 The development server binds to `127.0.0.1:4200` and proxies `/api/**` to the backend at `127.0.0.1:8080`. Production output is `frontend/dist/salary-management-ui/browser`; packaging it with Spring Boot remains a delivery step. On this Mac, an ignored, checksum-verified Node distribution lives in `.tools/node-v24.22.0-darwin-arm64`; the frontend README explains selecting it for the current shell without changing the global Node default.
+
+## Application Shell
+
+The frontend opens `/employees` by default and provides a second `/analytics` route. Both currently display explicit placeholders without requesting employee/salary data. Unknown UI URLs show a not-found page with a link back. A shared header, visible navigation, main content region, and footer adapt to narrow screens; route changes update the page title and active-link indicator. A skip link and routed-content focus support keyboard use. Login/session handling is the next prerequisite before connecting protected data workflows.
 
 ## Git Exclusions
 
