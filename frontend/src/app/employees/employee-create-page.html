@@ -1,0 +1,162 @@
+<div class="page-heading">
+  <p class="eyebrow">Employee management</p>
+  <h1>Add employee</h1>
+  <p class="page-description">
+    Create an employee record and their current gross annual base salary.
+  </p>
+</div>
+
+@if (created(); as employee) {
+  <section class="employee-card confirmation" aria-labelledby="confirmation-heading">
+    <h2 #confirmation id="confirmation-heading" tabindex="-1">Employee added</h2>
+    <p role="status">The employee and current salary have been saved.</p>
+    <dl>
+      <div>
+        <dt>Employee number</dt>
+        <dd>{{ employee.employeeNumber }}</dd>
+      </div>
+      <div>
+        <dt>Full name</dt>
+        <dd>{{ employee.fullName }}</dd>
+      </div>
+      <div>
+        <dt>Department</dt>
+        <dd>{{ employee.departmentName }}</dd>
+      </div>
+      <div>
+        <dt>Country</dt>
+        <dd>{{ employee.countryName }} ({{ employee.countryCode }})</dd>
+      </div>
+      <div>
+        <dt>Gross annual base salary</dt>
+        <dd>{{ employee.salaryAmount }} {{ employee.currencyCode }}</dd>
+      </div>
+    </dl>
+    <a matButton="filled" routerLink="/employees">Back to employees</a>
+  </section>
+} @else {
+  <section class="employee-card" aria-labelledby="employee-form-heading">
+    <h2 id="employee-form-heading">Employee details</h2>
+    <p class="form-description">
+      All fields are required. Country and salary currency can be chosen independently.
+    </p>
+    @if (loading()) {
+      <p role="status">Loading employee options…</p>
+    }
+    @if (optionsError(); as message) {
+      <div class="form-alert">
+        <p role="alert">{{ message }}</p>
+        <button matButton="tonal" type="button" (click)="loadOptions()" [disabled]="loading()">
+          Retry options
+        </button>
+      </div>
+    }
+    @if (saveError(); as message) {
+      <div class="form-alert">
+        <p role="alert">{{ message }}</p>
+        <a routerLink="/employees">Check employee directory</a>
+      </div>
+    }
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <fieldset [disabled]="loading() || saving() || !optionsReady()">
+        <legend class="visually-hidden">Employee and compensation information</legend>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Employee number</mat-label>
+          <input
+            matInput
+            name="employeeNumber"
+            formControlName="employeeNumber"
+            autocomplete="off"
+            required
+          />
+          <mat-hint
+            >Use 1–32 A–Z letters, digits, hyphens or underscores. Start with a letter or
+            digit.</mat-hint
+          >
+          @if (fieldError('employeeNumber'); as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Full name</mat-label>
+          <input matInput name="fullName" formControlName="fullName" autocomplete="off" required />
+          <mat-hint>Up to 200 characters. International names are welcome.</mat-hint>
+          @if (fieldError('fullName'); as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Department</mat-label>
+          <select matNativeControl name="departmentId" formControlName="departmentId" required>
+            <option value="">Select a department</option>
+            @for (department of catalogs()?.departments ?? []; track department.id) {
+              <option [value]="department.id">{{ department.name }}</option>
+            }
+          </select>
+          @if (fieldError('departmentId'); as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Country</mat-label>
+          <select matNativeControl name="countryCode" formControlName="countryCode" required>
+            <option value="">Select a country</option>
+            @for (country of catalogs()?.countries ?? []; track country.code) {
+              <option [value]="country.code">{{ country.name }} ({{ country.code }})</option>
+            }
+          </select>
+          @if (fieldError('countryCode'); as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Gross annual base salary</mat-label>
+          <input
+            matInput
+            name="salaryAmount"
+            formControlName="salaryAmount"
+            type="text"
+            inputmode="decimal"
+            autocomplete="off"
+            required
+          />
+          <mat-hint
+            >Positive plain decimal, for example 1250000.00. No currency symbols, commas, or
+            exponents.</mat-hint
+          >
+          @if (fieldError('salaryAmount'); as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Currency</mat-label>
+          <select matNativeControl name="currencyCode" formControlName="currencyCode" required>
+            <option value="">Select a currency</option>
+            @for (currency of catalogs()?.currencies ?? []; track currency.code) {
+              <option [value]="currency.code">
+                {{ currency.code }} — {{ currency.name }} ({{ currency.minorUnits }} decimal places)
+              </option>
+            }
+          </select>
+          <mat-hint>Changing currency never converts or rounds the amount.</mat-hint>
+          @if (fieldError('currencyCode'); as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+      </fieldset>
+      <div class="form-actions">
+        <button
+          matButton="filled"
+          type="submit"
+          [disabled]="loading() || saving() || !optionsReady()"
+        >
+          Save employee
+        </button>
+        <button matButton type="button" (click)="cancel()" [disabled]="saving()">Cancel</button>
+      </div>
+      @if (saving()) {
+        <p role="status">Saving employee…</p>
+      }
+    </form>
+  </section>
+}

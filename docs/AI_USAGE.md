@@ -5,3 +5,4 @@ AI-assisted deterministic seeding: shared validation, transactional batch loadin
 AI-assisted Angular bootstrap: strict standalone setup, reproducible tooling, and focused verification.
 AI-assisted frontend authentication: cookie sessions, CSRF rotation, protected navigation, and login/logout verification.
 AI-assisted employee directory: server paging/search, exact salary display, and cancellation/error handling.
+AI-assisted employee creation UI: exact salary validation, CSRF-protected saves, safe field errors, and server-confirmed results.

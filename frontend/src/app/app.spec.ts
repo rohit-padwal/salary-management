@@ -112,6 +112,23 @@ describe('Application navigation', () => {
     expect(document.activeElement).not.toBe(page.querySelector('main'));
   });
 
+  it('opens the protected creation route from the directory and keeps the employee section active', async () => {
+    const page = await navigate('/employees');
+    page.querySelector<HTMLAnchorElement>('a[href="/employees/new"]')!.click();
+    await fixture.whenStable();
+    expect(router.url).toBe('/employees/new');
+    expect(page.querySelector('main h1')?.textContent).toBe('Add employee');
+    expect(document.title).toBe('Add employee | Salary Management');
+    expect(page.querySelector('nav a[aria-current="page"]')?.textContent?.trim()).toBe('Employees');
+    const cancel = Array.from(page.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Cancel',
+    )!;
+    cancel.click();
+    await fixture.whenStable();
+    expect(router.url).toBe('/employees');
+    expect(page.querySelector('main h1')?.textContent).toBe('Employees');
+  });
+
   it('shows a recoverable not-found page for unknown routes', async () => {
     const page = await navigate('/missing-page');
     expect(page.querySelector('main h1')?.textContent?.trim()).toBe('Page not found');

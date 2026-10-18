@@ -5,6 +5,10 @@
   background: #fff;
   overflow: hidden;
 }
+.add-employee {
+  margin-top: 1.25rem;
+  min-height: 2.75rem;
+}
 .directory-heading {
   padding: 1.5rem 1.5rem 0;
 }

@@ -15,6 +15,12 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'employees' },
       {
+        path: 'employees/new',
+        title: 'Add employee | Salary Management',
+        loadComponent: () =>
+          import('./employees/employee-create-page').then((page) => page.EmployeeCreatePage),
+      },
+      {
         path: 'employees',
         title: 'Employees | Salary Management',
         loadComponent: () =>

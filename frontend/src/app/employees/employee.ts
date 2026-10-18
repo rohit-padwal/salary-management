@@ -21,6 +21,11 @@ export interface EmployeePage {
   readonly totalPages: number;
 }
 
+export type CreateEmployeeInput = Pick<
+  Employee,
+  'employeeNumber' | 'fullName' | 'departmentId' | 'countryCode' | 'salaryAmount' | 'currencyCode'
+>;
+
 export interface EmployeeListQuery {
   readonly page: number;
   readonly size: number;

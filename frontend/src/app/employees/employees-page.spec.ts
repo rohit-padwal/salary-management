@@ -8,6 +8,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { MatPaginator } from '@angular/material/paginator';
 import { EmployeesPage } from './employees-page';
+import { provideRouter } from '@angular/router';
 
 describe('Employee directory', () => {
   let fixture: ComponentFixture<EmployeesPage>;
@@ -30,7 +31,7 @@ describe('Employee directory', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [EmployeesPage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(EmployeesPage);

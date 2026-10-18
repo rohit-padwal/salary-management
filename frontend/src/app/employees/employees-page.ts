@@ -7,6 +7,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatTableModule } from '@angular/material/table';
+import { RouterLink } from '@angular/router';
 import { BehaviorSubject, catchError, map, of, startWith, switchMap } from 'rxjs';
 import {
   Employee,
@@ -49,6 +50,7 @@ const salarySortValidator: ValidatorFn = (form) =>
     MatInputModule,
     MatPaginatorModule,
     MatTableModule,
+    RouterLink,
   ],
   templateUrl: './employees-page.html',
   styleUrl: './employees-page.css',

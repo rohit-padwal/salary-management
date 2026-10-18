@@ -6,6 +6,7 @@ describe('safeReturnUrl', () => {
       '/analytics?countryCode=IN#summary',
     );
     expect(safeReturnUrl('/employees?q=A%20B')).toBe('/employees?q=A%20B');
+    expect(safeReturnUrl('/employees/new')).toBe('/employees/new');
   });
 
   it.each([
@@ -17,6 +18,8 @@ describe('safeReturnUrl', () => {
     'https://example.com',
     '//example.com',
     '/employees/../login',
+    '/employees/new/../login',
+    '/employees/new/other',
     '/employees(aux:login)',
     '/employees\\evil',
     '/employees\n?x=1',

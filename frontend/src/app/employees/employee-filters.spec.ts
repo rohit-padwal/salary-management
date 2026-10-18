@@ -8,6 +8,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatPaginator } from '@angular/material/paginator';
 import { By } from '@angular/platform-browser';
 import { EmployeesPage } from './employees-page';
+import { provideRouter } from '@angular/router';
 
 describe('Employee filters and sorting', () => {
   let fixture: ComponentFixture<EmployeesPage>;
@@ -44,7 +45,7 @@ describe('Employee filters and sorting', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [EmployeesPage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(EmployeesPage);
