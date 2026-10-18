@@ -1,74 +1,38 @@
-# Frontend Tooling and Conventions
+# Frontend Conventions and Decisions
 
-**Status:** The user explicitly selected the latest stable modern Angular, not AngularJS. The Angular workspace under `frontend/` has a responsive application shell, a server-paginated/searchable employee directory, and a compensation analytics dashboard. Login/session handling and local browser integration with the authentication API are implemented. Department/country/currency filters and server sorting controls are implemented. Employee creation and version-checked editing are implemented. Analytics reporting is implemented; deployment remains a later step. Incubyte's confirmation remains a separate pending clarification.
+Implemented Angular/Material 22.2.3 with strict standalone components, zoneless change detection, OnPush, signals, typed Reactive Forms, and HttpClient providers. This stable baseline was checked on 2026-10-18; future upgrades must recheck [Angular compatibility](https://angular.dev/reference/versions) and published stable tags. Framework/CLI/Material versions are pinned; the lockfile fixes transitive versions and engine checks enforce compatible tooling. Node/npm versions, commands, and output paths are in the [frontend development guide](../frontend/README.md); complete setup is in the [root README](../README.md).
 
-## Verified Stable Baseline
+## Organization and Contracts
 
-Checked on **2026-10-18** against published package metadata and official documentation:
+Feature folders under `frontend/src/app/` own employee directory/forms, analytics, authentication, reference data, and layout. Keep templates, styles, and specs beside their component. Routes lazy-load protected pages beneath the shell; public login sits outside. Small typed services own API requests; shared helpers are introduced only for actual reuse.
 
-| Tool | Baseline |
+Money, IDs, and versions remain strings end to end. Never use Number conversion, numeric money pipes, or browser aggregation; the server owns monetary rules/rounding. Country and currency stay independent; catalog values come from the reference-data API, never invented fallbacks. Salary is a text input with exact string validation.
+
+The shared normalization helper mirrors Java 21 `Character.isWhitespace`, unlike JavaScript `trim()`. Literal non-breaking characters remain part of names/searches; Unicode limits count code points. Recheck parity on Java upgrades. Salary syntax remains untrimmed. See the [coverage review](COVERAGE_REVIEW.md) for the discovered mismatch and verification.
+
+## Interaction Invariants
+
+| Area | Behavior |
 | --- | --- |
-| Angular framework, CLI, build tooling | 22.2.3, stable releases |
-| Angular Material and CDK | 22.2.3, installed for navigation, login controls, and the prebuilt theme |
-| Node.js | 24.22.0 LTS, recorded in `frontend/.nvmrc`; project engine range `^24.15.0` |
-| npm | 11.19.1, recorded in package metadata |
-| TypeScript | 6.0.x (`>=6.0 <6.1`) |
-| RxJS | Compatible stable 7.x within Angular's `^7.4.0` range |
-| Unit testing | CLI-managed Vitest and DOM test environment |
+| Directory | Server pages only; explicit Apply separates draft/applied search, filters, sort. Apply/size changes reset page zero; Reset retains size and restores default sort. Sizes 25/50/100. Salary sort requires selected currency. |
+| Analytics | Explicit Apply/Reset, visible applied criteria, independent report/catalog retries; render exact server currency cards and grouped table. No client aggregation or polling. |
+| Reads | Cancel superseded/destroyed requests; clear obsolete rows during loading/failure. Distinguish empty directory, no matches, out-of-range page, and safe retryable errors. |
+| Creation | Refresh CSRF, send six string fields once, block duplicate submission, confirm server-normalized result. Uncertain saves direct HR to check directory; no automatic replay. |
+| Editing | Shared form retains original ID/version outside controls. PUT sends all six fields plus version. No-change confirmation uses actual server metadata. |
+| Conflict recovery | Stale/unknown conflict, missing update target, or uncertain response preserves draft and blocks Save. Explicit discard/reload replaces fields/version only after successful GET; failure retains draft. No automatic merge/retry. |
 
-The machine's global Node remains 25.9.0, outside Angular 22.2.3's supported engine ranges. An official SHA-256-verified Node 24.22.0 distribution is available in ignored `.tools/` for this working copy, selected per command or shell; global tooling is unchanged. `frontend/.npmrc` enforces engines, saves new direct dependencies exactly, and puts npm cache files in ignored `.tools/npm-cache`. Angular framework/CLI/build packages are pinned to 22.2.3, while `package-lock.json` fixes the complete resolved dependency graph. Use `npm ci` for reproducible setup and local npm scripts rather than a global CLI. Future upgrades must recheck stable tags and compatibility; preview releases remain excluded.
+Field failures map known field/code pairs to local messages; arbitrary response text is never rendered. Catalog retries do not replay employee/report queries. Query state and drafts are memory-only, lost on leaving/reloading/session redirection; there is no away guard or persistent draft store. Request cancellation cannot promise server-side rollback.
 
-Sources: published [Angular framework](https://registry.npmjs.org/@angular/core/latest), [CLI](https://registry.npmjs.org/@angular/cli/latest), [build](https://registry.npmjs.org/@angular/build/latest), and [Material](https://registry.npmjs.org/@angular/material/latest) metadata; Angular's [compatibility guidance](https://angular.dev/reference/versions); Node's [LTS release list](https://nodejs.org/en/about/previous-releases). These links can change after the verification date.
+## Session and Accessibility
 
-## Implementation Conventions
+Relative `/api` URLs use browser-managed cookies and Angular XSRF headers. Login obtains CSRF, posts URL-encoded credentials, refreshes rotated token, and reads session identity; password controls are cleared after submission. No credentials/tokens are stored in localStorage/sessionStorage. Protected activation fails closed; backend authorization is authoritative.
 
-- Use standalone components and application providers, strict TypeScript/templates, and the standard CLI application builder. Preserve the current zoneless default; no ZoneJS dependency is planned. See [components](https://angular.dev/essentials/components) and [zoneless guidance](https://angular.dev/guide/zoneless).
-- Organize frontend source by feature, such as employees, analytics, and authentication. Keep a component's template, styles, and `.spec.ts` alongside its TypeScript. Use descriptive hyphenated filenames and `inject()` for dependency injection. The frontend follows Angular's [style guide](https://angular.dev/style-guide), rather than copying backend layer folders into a global components/services hierarchy.
-- Keep components focused on presentation. Use signals/computed values for local view state, built-in `@if`/`@for` control flow, and stable employee IDs for list tracking. Avoid manual DOM manipulation and needless state-management dependencies. See [template control flow](https://angular.dev/guide/templates/control-flow).
-- Retain the approved typed Reactive Forms approach for employee editing and typed HttpClient services for API access. Keep monetary values and IDs as strings across the API boundary. Do not introduce Signal Forms or another form abstraction without a concrete reason and an approved change.
-- Preserve same-origin session/CSRF integration and explicit loading, empty, validation, error, and stale-edit states. Server validation and authorization remain authoritative. Use Material for needed controls, not as a reason to add speculative UI features.
-- Use the CLI's supported [Vitest setup](https://angular.dev/guide/testing), testing user-visible behavior and HTTP/form integration. Run noninteractive tests and a production build before completing each frontend step. The navigation suite mounts the real root outlet before routing and verifies shell behavior, page titles, active links, skip-link/route focus, initial browser focus, and recovery. Real browser checks cover desktop/narrow layouts and keyboard use; future screens will add data-workflow tests. See [workspace commands](../frontend/README.md).
+Return destinations are allowlisted employee directory/new/digits-edit and analytics routes, optionally with query/fragment. Non-auth API 401 clears local identity and redirects without replay; 403 is not treated as bad credentials. Logout posts once and clears identity on success; failed logout remains visible/retryable, and failed anonymous-token refresh cannot undo completed logout.
 
-Initialization, layout, and navigation are complete. Employee creation, editing, and analytics reporting are complete; production asset packaging remains a separate increment. The local `/api/**` proxy connects the login/session UI to the existing backend; deployed integration remains later work.
+The shell provides responsive navigation, active links/titles, skip link, routed-content focus, and recoverable not-found page. Tables use captions/scoped headers and a focusable horizontal scroll region. Controls remain usable during loading; confirmations/errors receive appropriate focus/announcements. Material's local Azure theme and system fonts avoid external font requests.
 
-## Layout and Extension Points
+## Verification and Extension
 
-The root delegates to the router. `layout/app-shell` is the parent route for lazy-loaded employee, analytics, and not-found pages, so navigation and focus behavior remain stable as feature content changes. Both navigation links stay visible and wrap below the brand on narrow screens. Native anchors retain expected keyboard/link behavior; `aria-current`, an active underline, and route titles identify the current view. Initial navigation preserves native focus; later SPA navigation moves focus to main content after rendering. The subscription is disposed with the shell. Native focus calls are limited to this accessibility behavior.
+Vitest/HttpTestingController specs cover observable requests, exact values, cancellation, draft/applied criteria, validation, recovery, session behavior, navigation, and focus. [Verification](VERIFICATION.md) records actual connected Chrome checks and limits; these local scripts are not an installed application dependency or committed browser runner.
 
-Material uses the local prebuilt Azure theme, CSS/system fonts, and no extra animation/icon-font dependency. The employee directory reads server pages; analytics reads server compensation aggregates. The public login route sits outside the protected shell, which displays the username returned by the server. Authentication is confined to `auth/`: a typed Reactive Form, session service, child-route guard, safe return-URL rule, and functional expiry interceptor. Further employee workflows and analytics views can be added within their feature directories without duplicating the layout. No generic page framework or global state library is introduced.
-
-## Session Integration
-
-Use the existing cookie session and Angular’s default same-origin XSRF support. Obtain CSRF before login/logout and refresh after successful authentication changes; read identity from `/auth/session`, never infer it from submitted credentials. Only a session-check 401 means anonymous; availability failures remain visible and protected activation fails closed. Return URLs allow known feature routes only. Non-auth API 401 redirects to login and propagates the original failure without retry; 403 remains a distinct error. The application never writes credentials or tokens to localStorage/sessionStorage.
-
-The guard rechecks the server during protected route activation, accepting a small extra request rather than trusting cached identity. Server authorization remains required for every API call. Logout failures do not claim success; token-refresh failure after completed logout does not restore authentication. Existing form fields/buttons use Material’s public system typography tokens to retain local fonts. Future employee services reuse HttpClient and its existing CSRF/expiry handling; RBAC, SSO, and production same-origin packaging require separate decisions.
-
-## Text Normalization
-
-Employee text validation and applied searches share `shared/text-normalization`, matching the API's Java 21 whitespace rule. Non-breaking spaces, figure/narrow non-breaking spaces, and BOM stay literal; code-point limits apply after only API-defined outer whitespace is stripped. Original name/identifier form values remain server-normalized, and salary syntax is never stripped. See the [coverage review](COVERAGE_REVIEW.md) for the defect, regression evidence, and upgrade boundary.
-
-## Directory Read Flow
-
-Use `EmployeeApi` with explicit page/size/search/filter parameters and typed sort fields/directions. The default remains employee-number ascending; the server always adds its stable ID tie-breaker. A page-sized array feeds the native Material table directly; pagination and matching remain on the database. IDs, versions, and salary values stay strings, including values beyond JavaScript’s safe integer range. Salary display preserves the server decimal scale and records its currency separately.
-
-Explicit Apply/Enter submission updates search, department/country/currency filters, and sorting together, avoiding per-keystroke or per-selection reads. Pagination uses applied values until the next Apply; Reset clears all criteria and restores default sorting while preserving page size. The typed form checks the 200-code-point limit; the server remains authoritative. A request stream uses switchMap and toSignal teardown to cancel obsolete/destroyed reads. Catch errors inside each request so retries and later searches continue. Clear stale rows during reads/failures, offer a first-page recovery for an empty out-of-range page, and retain paginator controls during reads. Apply and page-size changes reset to page zero. Catalog filters combine with AND and remain independent. A group validator prevents salary sorting without an explicitly selected currency; country is never a currency substitute. Local query state keeps this increment small; URL persistence remains a separate decision. Employee names link to protected edit forms.
-
-`reference-data/` owns readonly catalog DTOs and a cold HttpClient service reusable by future employee forms. The directory loads catalogs independently from employee pages; no cache or invented fallback options are added. Lookup errors keep browsing/search usable and offer a separate retry. Native selects inside Material fields retain standard keyboard behavior and stack on narrow screens. API authorization/validation remains authoritative.
-
-## Creation Form
-
-`employees/employee-form-page` reuses the protected shell and catalog service for both creation and editing. A typed Reactive Form and pure text-validation functions cover required values, employee-number syntax, Unicode name length, and exact salary magnitude/precision. Salary stays a string from text input to POST/PUT; currency changes revalidate without conversion. Options must load and all required catalogs must contain choices before Save is enabled.
-
-`EmployeeApi.create` explicitly selects six editable fields, obtains CSRF, and posts once; it never sends read-only IDs/versions or retries automatically. Known field/code errors become local form messages, and editing that control clears its server error through normal Reactive Forms validation. Other fields remain intact. Pending saves block duplicate submission and Cancel. Successful creation displays the server response and focuses its confirmation; uncertain responses preserve input and suggest a directory check. Drafts are memory-only, with no autosave or navigation-away guard. The existing server uniqueness/authorization/atomic-write rules remain authoritative.
-
-## Editing and Conflict Recovery
-
-Employee-name links open `/employees/:id/edit`. Load the employee before showing the form, keeping its original ID/version outside controls. GET does not require CSRF; PUT refreshes CSRF and sends exactly the six editable fields plus the original string version. Confirmation uses the server response, including unchanged submissions that retain their metadata. The shared form avoids divergent create/edit validation without introducing a generic form framework.
-
-Stale/unknown conflicts, missing update targets, and uncertain write outcomes block Save and preserve the draft. The explicitly labelled discard/reload action replaces fields/version only after a successful GET; failed reloads preserve the draft. No automatic merge, version bump, or retry is allowed. Duplicate-number errors remain correctable normally. Route changes cancel obsolete reads/write subscriptions and reset state; request cancellation cannot promise rollback. Session expiry returns to the allowlisted edit route through login and discards the memory-only draft. Future reconciliation or draft persistence requires a separate design decision.
-
-## Compensation Analytics
-
-`analytics/` owns the typed report contract, GET service, and standalone dashboard. Salary cards and the native table display exact server strings with explicit currency context; only headcount spans currencies. Keep monetary aggregation/rounding on the server. Reuse employee-search validation and reference-data catalogs, applying all draft criteria explicitly. Display applied criteria separately and retry the applied query. Cancel obsolete/destroyed requests and clear results during loading/failure. Empty/no-match states and independent catalog retry preserve a usable report flow.
-
-Use scoped table headers, a descriptive caption, and a keyboard-focusable horizontal scroll region rather than an extra visualization dependency. Current grouping dimensions yield compact aggregates; more granular reporting would require measuring response size before selecting pagination or charts. Query state is local; URL persistence, polling, export, and historical reporting are separate decisions.
+URL-persisted criteria, durable drafts, CSV, charts, historical reporting, conversion, and new roles require separate product/contracts decisions. Production Docker serves these assets through Nginx under the same API origin; development uses the configured proxy. See [architecture](ARCHITECTURE.md) for packaging trade-offs.

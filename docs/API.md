@@ -1,41 +1,31 @@
 # API Contracts and Business Rules
 
-**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`), retrieval/editing (`GET`/`PUT /api/v1/employees/{id}`), reference-data lookup (`GET /api/v1/reference-data`), and authentication/session/CSRF endpoints are implemented and tested. Paginated employee search, department/country/currency filtering, allowlisted sorting, and compensation analytics (`GET /api/v1/analytics/compensation`) are implemented. Analytics requires authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
+Implemented JSON REST under `/api/v1`; [assumptions](ASSUMPTIONS.md) distinguish approved product choices from assessment requirements. Examples below illustrate the contract, not captured responses.
 
 ## Conventions
 
-Use JSON REST endpoints under `/api/v1`, with explicit request/response DTOs. Paths below include this prefix. The [requirements](REQUIREMENTS.md), [architecture](ARCHITECTURE.md), [data model](DATA_MODEL.md), and [assumptions](ASSUMPTIONS.md) define the surrounding scope.
+- IDs/versions and money are JSON **strings**; counts/page metadata are integers. IDs are positive Long values; versions are nonnegative Long values. ASCII digits and leading zeros are accepted; signs, surrounding whitespace, exponents, decimals, and overflow are rejected.
+- Timestamps are ISO 8601 UTC strings. ID, timestamps, and persistence version are server-managed; update `version` is a precondition.
+- JSON writes reject unknown/server-managed fields, trailing tokens, and number/boolean-to-string coercion. Required-field errors are ordered by field; business validation may report the first failed rule.
+- Employee, reference-data, and analytics APIs require a session. Mutations also require CSRF. Authentication is checked before parameter/target validation. Security failures return JSON problems without login redirects or Basic challenges.
 
-- IDs and versions are base-10 integer strings, preserving exact values across Java and JavaScript. Record IDs are positive; versions are nonnegative. Invalid/out-of-range values are rejected.
-- Monetary amounts are decimal strings, never JSON numbers. Pagination values and headcounts are JSON integers.
-- Timestamps are ISO 8601 UTC strings. IDs, timestamps, and persistence versions are server-managed; an update supplies the original version as a precondition, not a value to assign.
-- Successful JSON responses use `application/json`. Errors use `application/problem+json` as described below. Login uses URL-encoded form fields.
-- Employee, reference-data, and analytics endpoints require authentication. API errors must not redirect to an HTML login page.
-- Examples are illustrative contract examples, not captured runtime responses or evidence that endpoints exist.
+## Endpoints
 
-## Employee Endpoints
+| Method and path | Success / behavior |
+| --- | --- |
+| `GET /api/v1/employees` | `200` page envelope; directory criteria below |
+| `GET /api/v1/employees/{id}` | `200` employee; malformed ID `400`, valid missing ID `404` |
+| `POST /api/v1/employees` | `201` employee and `Location: /api/v1/employees/{id}` |
+| `PUT /api/v1/employees/{id}` | `200` employee; full atomic replacement, original version required |
+| `GET /api/v1/reference-data` | `200` supported catalogs |
+| `GET /api/v1/analytics/compensation` | `200` compensation report |
+| `GET /api/v1/health` | Public status-only readiness: `200 {"status":"UP"}`; `503` STARTING or DOWN |
 
-| Method and path | Behavior | Success |
-| --- | --- | --- |
-| `GET /api/v1/employees` | Paginated employee search, filtering, and sorting | `200` with page envelope |
-| `GET /api/v1/employees/{id}` | Retrieve an employee for viewing/editing | `200` with employee response |
-| `POST /api/v1/employees` | Create an employee and current compensation atomically | `201` with employee response and `Location: /api/v1/employees/{id}` |
-| `PUT /api/v1/employees/{id}` | Replace all editable fields atomically, checking the original version | `200` with updated employee response |
-| `GET /api/v1/reference-data` | Retrieve supported departments, countries, and currencies | `200` with reference-data response |
+No deletion, PATCH, upsert, separate salary endpoint, or catalog-write handlers are provided. Reads do not change employee metadata and require no CSRF header.
 
-There is no employee deletion, partial-update, or separate salary-update endpoint in the MVP. `PUT` updates an existing employee; a missing employee returns `404` rather than creating a record.
+## Employee Writes and Response
 
-Creation, retrieval, full editing by ID, and reference-data lookup are currently implemented in this table. The Angular creation form now posts the six editable string fields after CSRF acquisition, preserves entries on errors, and confirms the server response. No automatic create retry or idempotency-key contract is added; after a lost response, HR is directed to check the directory before retrying. Paginated listing, literal case-insensitive search, and department/country/currency filtering are also implemented. The creation `Location` can be followed to retrieve the record. Allowlisted server-side sorting is also implemented, as detailed below.
-
-Retrieval requires authentication but no CSRF header. Parse path IDs with the same positive-`Long` helper used for creation's department ID: ASCII digits only, no signs/whitespace/decimal points/exponents, and no overflow. Leading zeros are accepted. Invalid values return `400 VALIDATION_ERROR` with field `id`; a valid missing ID returns `404 EMPLOYEE_NOT_FOUND`. Authentication is checked before parsing/lookup. A successful read returns the same response representation without changing salary, version, or timestamps.
-
-### Requests and Employee Response
-
-Create requests contain `employeeNumber`, `fullName`, `departmentId`, `countryCode`, `salaryAmount`, and `currencyCode`. Update requests contain all of these fields plus `version`. Missing required fields, unknown write fields, and attempts to assign server-managed fields are rejected with `400`.
-
-Creation accepts a JSON object with six string-valued fields; numbers/booleans are not coerced into strings. Trailing JSON tokens are rejected. Jakarta Bean Validation checks required values; application rules handle normalization, names, references, and money. Department IDs must parse exactly as positive `Long` values, without signs, decimal points, exponents, or surrounding whitespace. HTTP response mapping explicitly formats IDs/versions, currency-scale decimal amounts, and UTC timestamps as strings.
-
-Illustrative update request:
+Create requires six strings; update requires those plus the original `version`:
 
 ```json
 {
@@ -49,208 +39,93 @@ Illustrative update request:
 }
 ```
 
-An employee response contains the six editable fields plus `id`, `version`, `createdAt`, `updatedAt`, `departmentName`, and `countryName`. It returns normalized identifiers/codes and salary formatted to the currency's minor units. The returned version is the current persisted version, which must be used for the next edit. Creation requests omit `version`; the initial version is server-managed.
-
-### Validation and Normalization
+Creation omits `version`. Choose actual supported catalog values. The response contains these fields plus `id`, `createdAt`, `updatedAt`, `departmentName`, and `countryName`; salary is formatted to currency minor units.
 
 | Field | Rule |
 | --- | --- |
-| `employeeNumber` | Trim outer whitespace, allow ASCII letters/digits/hyphens/underscores, normalize letters to uppercase, then require `[A-Z0-9][A-Z0-9_-]{0,31}` and uniqueness. Corrections are allowed because internal `id` stays stable. |
-| `fullName` | Trim outer whitespace; preserve internal spacing/case; required and at most 200 characters. Support international names without a first/last-name split. |
+| `employeeNumber` | Strip outer Java whitespace, uppercase ASCII letters; `[A-Z0-9][A-Z0-9_-]{0,31}`; normalized value unique. |
+| `fullName` | Strip outer Java whitespace; preserve internal spacing/case; nonblank, at most 200 Unicode code points; no null characters. |
 | `departmentId` | Positive integer string referencing a supported department. |
-| `countryCode` | Trim and uppercase; require a supported employment-country record. |
-| `currencyCode` | Trim and uppercase; require a supported currency record independently of employment country. |
-| `salaryAmount` | Plain decimal string with no exponent, currency symbol, or grouping separators; positive, finite, representable in `NUMERIC(19,4)`, and compatible with currency minor units. |
-| `version` | Required nonnegative integer string on update, matching the original version edited by the client. |
+| `countryCode` / `currencyCode` | Strip outer whitespace, require ASCII code shape, uppercase, resolve supported catalog. Choices are independent. |
+| `salaryAmount` | Positive plain decimal, no surrounding whitespace, plus sign, exponent, symbol, or grouping separator; strictly below `1000000000000000`; meaningful precision must fit selected currency. |
+| `version` | Original nonnegative integer string on PUT; never assigned to the entity version. |
 
-Validate money with `BigDecimal` before persistence. Reject meaningful excess precision instead of rounding it into the column. Insignificant trailing zeros may be accepted. There is no additional HR salary ceiling beyond the current storage limit unless a later requirement establishes one.
+Money is validated with `BigDecimal` before persistence; meaningful excess precision is rejected, insignificant trailing zeros accepted. There is no additional business salary ceiling. Currency and amount are replaced together without conversion.
 
-Changing currency requires submitting amount and currency together as part of the full update. This replaces the recorded compensation; it does not perform conversion. All employee/compensation changes must succeed or roll back together. Unknown referenced records in request fields are validation errors (`400`); an unknown employee target is `404`.
+Successful effective edits advance version/update time, preserving ID/creation time. Normalized no-change submissions preserve metadata but still verify the original version through commit. Validation/conflict failures roll back the full replacement. Duplicates return `409 EMPLOYEE_NUMBER_CONFLICT`; stale forms or concurrent optimistic failures return `409 STALE_EMPLOYEE`; missing targets return `404 EMPLOYEE_NOT_FOUND`. No automatic write replay, forced version replacement, or merge is supplied.
 
-### Stale Edits and Conflicts
+## Directory Criteria
 
-The UI retains the version returned when the employee was loaded. On `PUT`, compare this original version with the stored version and use JPA optimistic locking to cover a concurrent change during the transaction. Either kind of stale update returns `409` with `STALE_EMPLOYEE`.
+Example: `/api/v1/employees?page=0&size=25&q=asha&countryCode=IN&sort=fullName,asc`.
 
-Do not silently retry against the latest version. The UI preserves the user's form and offers reloading the employee. A duplicate normalized employee number returns `409` with `EMPLOYEE_NUMBER_CONFLICT`, including when a concurrent write reaches the database unique constraint first. Do not expose database exception details.
-
-The Angular edit form now consumes this contract. It retains the original version outside editable controls and sends all seven string fields after CSRF acquisition. Stale/unknown conflicts, missing update targets, and uncertain responses preserve the draft and block Save. The explicit discard/reload action replaces fields and version only after a successful GET; failed reloads leave the draft intact. No automatic merge, version replacement, write retry, or API change is introduced.
-
-The body version was selected instead of ETag/`If-Match` for this form-driven MVP. Future conditional-header support would need an explicit contract change.
-
-PUT accepts exactly the six editable string fields and a nonnegative integer-string `version` within the `Long` range; zero and leading zeros are accepted. Signs, whitespace, exponents, decimals, overflow, numeric JSON values, and server-managed write fields are rejected. Input normalization, reference checks, currency precision, and employee-number uniqueness use the same rules as creation. The client version is checked against the managed entity and is never assigned to its version field.
-
-An effective update returns `200` with a new persisted version/update timestamp, preserving ID and creation timestamp. A normalized no-change submission returns the existing representation without advancing metadata. Its version is still verified through commit using an optimistic lock, so a concurrent writer can produce `409` even when the submitted values cause no write. Flush-time and commit-time optimistic failures use the same `STALE_EMPLOYEE` response. No automatic retry or upsert is performed. A valid missing target returns `404 EMPLOYEE_NOT_FOUND`.
-
-## Listing Contract
-
-### Implemented Pagination, Search, Filters, and Sorting
-
-Authenticated `GET /api/v1/employees` currently accepts `page`, `size`, optional `q`, optional `departmentId`/`countryCode`/`currencyCode`, and optional `sort`, once each. Pagination defaults are `0` and `25`; page is within `0..2147483647`, and size within `1..100`. For page/size, parse ASCII digits only, accepting leading zeros and rejecting empty values, signs, whitespace, decimals, exponents, non-ASCII digits, and overflow. Return `400 VALIDATION_ERROR` for invalid/repeated parameters. Unsupported parameters return a generic query-field error without echoing their names/values. Authentication is checked before query validation; GET requires no CSRF token.
-
-`q` is stripped of surrounding Unicode whitespace; missing/blank values mean no search. Its normalized length is at most 200 Unicode code points, matching employee-name length semantics. Excess length returns a `q` field error with `TOO_LONG`; null characters return `INVALID_FORMAT`; repeated values return `SINGLE_VALUE_REQUIRED`. Outer text whitespace follows Java 21 `Character.isWhitespace`: NBSP (`U+00A0`), figure space (`U+2007`), narrow NBSP (`U+202F`), and BOM (`U+FEFF`) remain literal characters, including at the edges. The Angular client now applies the same rule for validation and submitted searches. Preserve internal spacing and search the whole literal substring of employee number OR full name. Case conversion for both fields and the bound pattern happens in PostgreSQL using the database collation. Match each employee once even if both fields match.
-
-The count and content queries share one JPQL predicate and use the same bound pattern. LIKE uses `!` as its explicit escape character: escape literal `!` first, then `%` and `_`, before adding surrounding substring wildcards. Backslashes and apostrophes remain literal parameter data. Empty search imposes no search restriction; absent search and filters take the existing unfiltered path. Example: `/api/v1/employees?q=asha&page=0&size=25`. Totals describe matching employees only; no matches return empty items and zero totals.
-
-Optional catalog filters combine with AND, with the employee-number/name OR expression parenthesized before filtering. `departmentId` uses the existing positive-Long parser: ASCII digits only, leading zeros accepted, no signs/whitespace/overflow. Country/currency filters use the same ASCII code validation and trim/uppercase normalization as writes. Missing parameters mean no filter; supplied blank values return `REQUIRED`, malformed values return their field validation error, and unsupported catalog records return `UNKNOWN_REFERENCE`. Repeated filter parameters return `SINGLE_VALUE_REQUIRED`, including repeated identical values. Errors do not echo rejected values.
-
-Catalog validation occurs before employee queries, including when there are no employees or no search matches. A valid supported value matching no employees returns an empty page, not a reference error. Country and currency are independent. Each supplied filter performs one catalog lookup; the count/content methods share one bound condition for search and all three filters. Nullable search patterns are explicitly cast to String before `lower()` to avoid the null-type inference failure found by PostgreSQL integration tests.
-
-Optional `sort` is exactly one `field,direction` pair, with field names from the allowlist below and lowercase `asc` or `desc`. Names are case-sensitive; whitespace, missing/extra parts, internal property paths, functions, and unknown names/directions return `400 VALIDATION_ERROR` with `sort` / `INVALID_FORMAT`. Repeated `sort` returns `SINGLE_VALUE_REQUIRED`, including identical repeated values. Missing `sort` defaults to `employeeNumber,asc`; supplied blank sort is invalid.
-
-The parser converts public names/directions to typed enum values. The service maps those values to fixed JPA properties, then always appends `id ASC` independently of the primary direction. Client strings never become sort expressions. Text sorting uses database collation; salary sorting uses stored numeric amounts and requires an explicitly selected supported currency. Without a currency filter, return `sort` / `CURRENCY_REQUIRED` even for empty/no-match data or a selected country. Supplied invalid/unknown currencies retain their normal currency field errors. Country does not imply currency. Non-HTTP request construction enforces the same salary-currency rule.
-
-The Angular directory consumes this contract for server pagination, explicit name/employee-number search, independent department/country/currency filters, and all six sort fields in either direction. Apply or size changes return to page zero; pagination/retry retain applied criteria. Page sizes are 25/50/100. Reset clears criteria and restores the backend default sort. Salary sorting requires explicit currency in the form as well as on the server. IDs/salaries stay exact strings. Creation/editing UI uses the existing POST/GET/PUT contracts and preserves the original edit version. No API contract change is introduced.
-
-The implemented response envelope contains `items`, `page`, `size`, `totalElements`, and `totalPages`. Items reuse the full employee response; metadata values are JSON integers. Ordering defaults to `employeeNumber ASC, id ASC`; selected primary order always retains `id ASC` as the final tie-breaker. Empty databases have empty items and zero totals; out-of-range pages have empty items and actual totals. Counts and page offsets use long arithmetic. The service counts first and skips page fetching when its offset is beyond that count, including very large valid page numbers. In-range pages are bounded database reads with lookup labels fetched together.
-
-The read-only transaction uses the existing default isolation. A concurrent write between the count and page queries may change the visible rows, so the response is not a guaranteed snapshot; separate page requests likewise do not share a snapshot. No new indexes were added for sorting; query plans still require workload measurement.
-
-### Listing Parameters
-
-Example: `/api/v1/employees?page=0&size=25&q=asha&countryCode=IN&sort=fullName,asc`. All listing parameters in this table are implemented.
-
-| Parameter | Behavior |
+| Parameter | Contract |
 | --- | --- |
-| `page` | Zero-based, default `0`, integer from `0` through `2147483647`. |
-| `size` | Default `25`, integer from `1` through `100`. |
-| `q` | Strip surrounding Unicode whitespace; at most 200 Unicode code points; blank means absent. Case-insensitive literal substring of employee number OR full name. |
-| `departmentId` | Optional exact supported department filter. |
-| `countryCode` | Optional exact supported country filter, normalized as above. |
-| `currencyCode` | Optional exact supported currency filter, normalized as above. |
-| `sort` | One field/direction pair; default `employeeNumber,asc`; direction is `asc` or `desc`. |
+| `page` | Default `0`; ASCII digits, `0..2147483647`. |
+| `size` | Default `25`; ASCII digits, `1..100`. |
+| `q` | Optional literal case-insensitive substring of employee number OR full name; strip outer Java whitespace; blank means absent; max 200 code points; null characters rejected. |
+| `departmentId` | Optional positive supported department ID. |
+| `countryCode` / `currencyCode` | Optional supported code, normalized as on writes. Omitted means unrestricted; supplied blank is invalid. |
+| `sort` | Exactly one case-sensitive `field,direction`; default `employeeNumber,asc`; direction `asc` or `desc`. |
 
-Combine distinct filters with AND. Escape wildcard characters so `%` and `_` in search text are matched literally rather than treated as SQL patterns. Parameterize database queries; do not interpolate search values or unvalidated sort expressions into SQL.
+Each parameter may occur once, including identical repeats. Unsupported names return `query / UNSUPPORTED_PARAMETER`; invalid/repeated values return `400 VALIDATION_ERROR`. Pagination rejects signs, whitespace, decimals, exponents, non-ASCII digits, and overflow; leading zeros are accepted.
 
-The sort allowlist is `employeeNumber`, `fullName`, `departmentName`, `countryCode`, `currencyCode`, and `salaryAmount`. Append `id ASC` as the unique final tie-breaker. Salary sorting requires a selected currency filter; otherwise return `400` rather than imply amounts in unlike currencies are comparable.
+Search preserves the full literal substring and internal spacing. Java 21 `Character.isWhitespace` governs outer stripping: NBSP (`U+00A0`), figure space (`U+2007`), narrow NBSP (`U+202F`), and BOM (`U+FEFF`) remain literal. PostgreSQL case conversion/collation controls matching. `%`, `_`, `!`, backslashes, and apostrophes are literal input, not query structure.
 
-Invalid parameters, unsupported filter values, or unsupported sort fields/directions return `400`. A valid filter matching no employees returns an empty page. A page beyond the result range also returns `200` with empty `items` and the actual totals.
+Catalog filters combine with AND around the parenthesized name/number OR. Provided catalogs are validated even with no matching employees. Invalid references return `UNKNOWN_REFERENCE`; repeated parameters `SINGLE_VALUE_REQUIRED`; supplied blank catalog filters `REQUIRED`.
 
-Return an application-owned envelope containing `items` (employee responses), `page`, `size`, `totalElements`, and `totalPages`; do not expose Spring's internal page serialization as the contract. For no matching employees, `totalElements` and `totalPages` are zero.
+Sort fields: `employeeNumber`, `fullName`, `departmentName`, `countryCode`, `currencyCode`, `salaryAmount`. Typed aliases map to fixed properties; arbitrary property paths/functions are rejected. Every ordering appends `id ASC`, including descending primary order. Salary sorting requires an explicit valid currency filter (`sort / CURRENCY_REQUIRED` otherwise), even for empty results. Country never implies currency; salary order is numeric within one currency.
 
-Offset pagination is appropriate for the current dataset. A unique sort tie-breaker orders an unchanged dataset deterministically; it does not promise snapshot consistency across separate requests while employees are changing. Additional indexes follow actual query measurements rather than every sort option.
+The response is `{ "items": [...], "page": 0, "size": 25, "totalElements": 10000, "totalPages": 400 }`, with full employee representations. Empty results have zero totals; out-of-range pages have empty items and actual totals. Database-side bounded pages avoid loading the directory. Stable tie ordering applies to unchanged data; count/content and separate requests do not share a guaranteed snapshot during concurrent writes.
 
-## Reference-Data Contract
+## Reference Data
 
-The implemented authenticated `GET /api/v1/reference-data` returns `200 application/json` with one object containing:
+`GET /api/v1/reference-data` returns:
 
-- `departments`: records with `id` (string) and `name`.
-- `countries`: records with `code` and `name`.
-- `currencies`: records with `code`, `name`, and integer `minorUnits`.
+- `departments`: string `id`, string `name`; ordered by database name then ID.
+- `countries`: string `code`, string `name`; ordered by code.
+- `currencies`: string `code`, string `name`, integer `minorUnits`; ordered by code.
 
-Order departments by name ascending, then ID ascending; order countries and currencies by code ascending. Name ordering follows the database collation. Empty catalogs are empty arrays, never null or a missing property. Department IDs are exact strings, including values beyond JavaScript's safe integer range; minor units are JSON integers. GET requires a session but no CSRF cookie/header. Unauthenticated requests return `401 AUTHENTICATION_REQUIRED` without catalog data or an HTML redirect.
-
-The read-only query service fetches current database values through existing repositories; it does not hardcode catalogs or cache responses. Responses retain the existing security `no-store` headers. No new dependencies or schema changes are needed. POST/PUT/DELETE have no handlers and return `405` after authentication/CSRF checks.
-
-These are the supported catalogs used by forms, filters, and validation. They are controlled through migrations; no write endpoints are included. The implemented catalogs and display-name limits are documented in [DATA_MODEL.md](DATA_MODEL.md). A supported country does not restrict an employee to one inferred currency.
+All properties exist; empty catalogs are empty arrays. IDs remain exact beyond JavaScript's safe integer range. Catalogs come from current database records managed by migrations, without caching/admin endpoints. Responses use existing security cache-prevention headers.
 
 ## Compensation Analytics
 
-**Implementation status:** The HTTP endpoint, strict query parser, response DTOs, service, shared filter rules, PostgreSQL group query, and calculation/persistence/HTTP tests are implemented. The HTTP mapper emits currency-scaled plain decimal strings and lowercase grouping names; application results retain typed grouping and `BigDecimal` values.
+`GET /api/v1/analytics/compensation` accepts `groupBy` (`department` default, or `country`) plus the directory's `q`/three catalog filters. Group names are exact lowercase values. Repeated/unknown/blank parameters are rejected; `page`, `size`, and `sort` are unsupported.
 
-`GET /api/v1/analytics/compensation?groupBy=department`.
+The response contains `groupBy`, integer `totalHeadcount`, `currencySummaries`, and `groups`. Every summary/group has `currencyCode`, integer `headcount`, and string `totalSalary`, `averageSalary`, `minSalary`, `maxSalary`. Groups also have string `groupKey`/`groupLabel`; department keys are exact ID strings, country keys are codes.
 
-`groupBy` accepts exactly lowercase `department` or `country`, defaulting to `department` only when absent. Empty, whitespace-padded, and unknown values return `groupBy` / `INVALID_FORMAT`. Accept the same `q`, `departmentId`, `countryCode`, and `currencyCode` filters as listing, with identical normalization and matching. Each parameter is allowed once; repeats, including identical values, return `SINGLE_VALUE_REQUIRED`. Analytics has no pagination or sorting: `page`, `size`, `sort`, and all other unsupported parameters return `query` / `UNSUPPORTED_PARAMETER` without echoing names or values. Invalid requests return `400 VALIDATION_ERROR`. Authentication is checked before query parsing/catalog validation; GET requires no CSRF token. Unsupported response media types return `406`; no write handlers are offered (`405` after security checks).
+One grouped database read supplies both result levels. Each employee contributes once to a dimension/currency group and a currency summary. Headcount can span currencies; money cannot. Averages use exact total/count and one HALF_EVEN rounding step at currency precision, never averaged rounded subgroups. Totals/min/max remain exact and totals can exceed employee storage limits. Example: `1000.00 + 1000.01` gives total `2000.01`, average `1000.00` in a two-decimal currency.
 
-Return:
+Groups order by numeric department ID or country code, then currency; summaries by currency. Empty data yields headcount zero and empty arrays, without invented zero salary statistics. No conversion or historical reporting is implemented.
 
-- `groupBy`: the selected grouping dimension.
-- `totalHeadcount`: number of matching employees across currencies.
-- `currencySummaries`: one entry per represented currency, containing `currencyCode`, `headcount`, `totalSalary`, `averageSalary`, `minSalary`, and `maxSalary`.
-- `groups`: one entry per represented dimension/currency combination, containing the same aggregate fields plus `groupKey` and `groupLabel`. For department grouping the key is the department ID string; for country grouping it is the country code.
+## Session and CSRF
 
-Each employee contributes to one dimension/currency group and one currency summary. Never sum or average monetary values across currencies. Overall headcount may span currencies. The implemented service reads all dimension/currency groups in one SQL statement and derives summaries from those same captured rows, so the two result levels agree even if a writer commits afterward. No separate summary query is issued.
-
-PostgreSQL computes group headcounts, exact sums, minimums, and maximums. Java combines the aggregate rows by currency and computes averages from exact totals and headcounts, never from rounded subgroup averages. Format monetary strings to the currency's minor units. Round averages once using `HALF_EVEN`; totals, minimums, and maximums remain exact. Do not narrow totals to the per-employee storage range.
-
-For example, two salaries of `1000.00` and `1000.01` in a two-decimal currency produce total `2000.01` and displayed average `1000.00` under `HALF_EVEN`. Adding an employee in another currency creates separate monetary groups, not a combined total.
-
-Service groups are ordered by numeric department ID or country code ascending, then currency code ascending. Currency summaries are ordered by currency code. The SQL query keeps department IDs numeric for ordering and converts returned keys to exact strings.
-
-An empty result returns `totalHeadcount: 0`, `currencySummaries: []`, and `groups: []`. Omit unrepresented groups rather than inventing zero-valued salary statistics. Unknown grouping/filter values return `400`. There is no exchange-rate conversion.
-
-The Angular `/analytics` dashboard consumes this endpoint through `CompensationApi`: explicit Apply/Enter combines grouping, literal search, and catalog filters; Reset restores department/all employees. It renders the returned headcount, per-currency summary cards, and group rows directly, preserving exact monetary strings and server ordering. Applied criteria stay separate from draft controls; independent report/catalog retries and cancellation prevent stale displays. No new API parameters, money calculations, conversion, or write requests are introduced.
-
-## Session and CSRF Contract
-
-| Method and path | Behavior |
+| Endpoint | Contract |
 | --- | --- |
-| `GET /api/v1/auth/csrf` | Public; establish/refresh the CSRF token cookie; `204` with no body. |
-| `POST /api/v1/auth/login` | URL-encoded `username`/`password` with CSRF protection; `204` on success. Invalid credentials return generic `401`. |
-| `GET /api/v1/auth/session` | `200` with an object containing the authenticated `username`; otherwise `401`. |
-| `POST /api/v1/auth/logout` | CSRF-protected logout invalidates authentication; `204` on success. |
+| `GET /api/v1/auth/csrf` | Public `204`; materialize/refresh readable `XSRF-TOKEN` cookie. |
+| `POST /api/v1/auth/login` | URL-encoded `username`/`password` with CSRF; `204` success, generic `401` invalid credentials. |
+| `GET /api/v1/auth/session` | `200 {"username":"..."}` for authenticated session; otherwise `401`. |
+| `POST /api/v1/auth/logout` | CSRF-protected session invalidation; `204`. |
 
-Use Spring Security's login mechanism with API success/failure handlers, not custom password/session cryptography or HTML redirects. Credentials/password hashes come from deployment configuration and must never be committed or logged.
+Obtain CSRF before login/mutations; send cookie plus `X-XSRF-TOKEN` header. Refresh after successful login/logout because tokens rotate. The authentication cookie is HTTP-only, SameSite=Lax, Secure by default, and expires after 30 idle minutes; `local` explicitly permits HTTP. No browser token storage, Basic authentication, registration, or individual account administration.
 
-The authentication cookie is HTTP-only, secure over HTTPS in deployment, and uses `SameSite=Lax`. The idle session timeout is 30 minutes. Development HTTP cookie configuration must be explicit rather than weakening deployment settings.
+Missing/invalid CSRF returns `403`, including login/logout. Unsupported login content type returns `415` after CSRF checks. Web startup requires configured HR username/raw BCrypt hash; the local demo configuration supplies public credentials explicitly. See [configuration](../backend/TECHNICAL_DOCUMENTATION.md#configuration).
 
-For Angular integration, use a separate readable `XSRF-TOKEN` cookie and the `X-XSRF-TOKEN` request header. The CSRF endpoint must actually issue/materialize the token even though its response body is empty. The authentication cookie must remain inaccessible to JavaScript.
+## Errors
 
-The Angular client now implements login/session/logout using relative same-origin URLs and built-in XSRF handling. It obtains a CSRF token before login/logout and refreshes it afterward; a failed anonymous-token refresh after completed logout does not undo that logout. Login form passwords are cleared after submission; localStorage/sessionStorage persistence is not used. Protected route activation checks the server session, and non-auth API 401 responses redirect to login without replaying writes. Employee directory/creation/editing workflows consume these endpoints; analytics UI reporting consumes the existing compensation endpoint.
+RFC 9457 `application/problem+json` includes `type`, `title`, `status`, `detail`, path-only `instance` where supplied, stable `code`, and optional `errors` entries with `field`, `code`, `message`. No rejected values, credentials, SQL, query strings, or stack traces are returned. Problem types use stable URNs such as `urn:salary-management:problem:validation-error`.
 
-The client obtains a CSRF token before login or other mutating requests and refreshes it after successful login and logout. Spring must validate tokens for state-changing requests, including login/logout. Security-filter failures use the same problem response format as controller errors. A missing/invalid CSRF token can produce `403` before controller processing; the UI must not treat every `403` as bad credentials.
-
-Single-account session access does not implement registration, password recovery, user administration, advanced RBAC, or individual audit attribution.
-
-The implementation uses external `HR_USERNAME` and raw BCrypt `HR_PASSWORD_HASH` configuration, with no default account. Malformed/missing values prevent web startup. Cost 12 is recommended; hashes must have cost at least 10. Default cookies are Secure; the explicit `local` profile allows loopback HTTP development. Spring Security's SPA CSRF support handles raw header tokens and token clearing/refresh. Unsupported login content types produce `415` after CSRF validation. HTTP Basic and request caching/HTML redirects are disabled.
-
-## Error Contract
-
-Use RFC 9457 Problem Details with `application/problem+json`. Include `type`, `title`, `status`, and useful `detail`; use `instance` for the request path when provided, excluding search/query values. Add a stable application `code` and optional `errors` entries containing `field`, `code`, and `message`. Do not include rejected values, salaries, credentials, SQL details, or stack traces.
-
-Illustrative validation response:
-
-```json
-{
-  "type": "urn:salary-management:problem:validation-error",
-  "title": "Invalid request",
-  "status": 400,
-  "detail": "Correct the indicated fields.",
-  "instance": "/api/v1/employees",
-  "code": "VALIDATION_ERROR",
-  "errors": [
-    {
-      "field": "salaryAmount",
-      "code": "MUST_BE_POSITIVE",
-      "message": "Salary must be greater than zero."
-    }
-  ]
-}
-```
-
-| Status | Meaning and application-code examples |
+| Status | Codes |
 | --- | --- |
-| `400` | Invalid fields, parameters, references, or malformed request: `VALIDATION_ERROR`, `INVALID_REQUEST`. |
-| `401` | Missing/expired authentication or invalid login: `AUTHENTICATION_REQUIRED`, `INVALID_CREDENTIALS`. |
-| `403` | Invalid CSRF token or denied access: `CSRF_INVALID`, `ACCESS_DENIED`. |
-| `404` | Employee resource not found: `EMPLOYEE_NOT_FOUND`. |
-| `404` | Unmapped HTTP resource: `RESOURCE_NOT_FOUND`; distinct from employee lookup's business error. |
-| `405` | Unsupported method on a mapped resource: `METHOD_NOT_ALLOWED`, retaining the `Allow` header. |
-| `406` | Unsupported response media type: `NOT_ACCEPTABLE`. |
-| `409` | Duplicate employee number or stale update: `EMPLOYEE_NUMBER_CONFLICT`, `STALE_EMPLOYEE`. |
-| `415` | Unsupported request content type: `UNSUPPORTED_MEDIA_TYPE`. |
-| `500` | Unexpected failure: `INTERNAL_ERROR`, with a generic public message. |
+| 400 | `VALIDATION_ERROR`, `INVALID_REQUEST` (including malformed/unknown-field/wrong-type JSON) |
+| 401 | `AUTHENTICATION_REQUIRED`, `INVALID_CREDENTIALS` |
+| 403 | `CSRF_INVALID`, `ACCESS_DENIED` |
+| 404 | `EMPLOYEE_NOT_FOUND`, or unmapped `RESOURCE_NOT_FOUND` |
+| 405 | `METHOD_NOT_ALLOWED`, preserving `Allow` |
+| 406 | `NOT_ACCEPTABLE` |
+| 409 | `EMPLOYEE_NUMBER_CONFLICT`, `STALE_EMPLOYEE` |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` |
+| 500 | Generic `INTERNAL_ERROR` |
 
-Problem type identifiers are stable URI references; the sample uses a non-HTTP URN rather than adding problem-document endpoints. Never imply a business failure was successful, or expose implementation exceptions as the public error contract.
+Readiness `503` is a status-only health response, not an employee API problem. Clients render known local field/code messages rather than arbitrary server text. See [coverage evidence](COVERAGE_REVIEW.md) for contract tests and limits; partial updates, ETags, cursors, and new reports require separately approved contracts.
 
-Creation validation responses contain safe field/code/message entries. Multiple missing fields are returned in field-name order; business validation may return the first failing rule. Malformed JSON, unknown fields, and wrong JSON types use a generic `INVALID_REQUEST` response rather than parser exception text. Unhandled failures use generic `INTERNAL_ERROR`; application logging records the exception type without the request body or database exception message. Security-filter errors continue to be handled before controller processing.
-
-## Verification and Future Expansion
-
-Implemented tests cover:
-
-- Normalization, unique employee-number conflicts, international names, missing/unknown fields, and invalid references.
-- Plain decimal-string handling, meaningful excess precision, trailing zeros, storage limits, and exact monetary round trips.
-- Atomic updates, original-version stale forms, unchanged submissions, and races detected by optimistic locking/unique constraints, including commit-time verification.
-- Unauthenticated reads, generic login failure, session timeout, CSRF issuance/refresh, login/logout, and consistent security error bodies.
-- Complete ordered reference catalogs, exact string IDs/integer minor units, current database values, empty catalogs, read access without CSRF, and absence of catalog write handlers.
-
-Pagination tests cover defaults, traversal/totals, empty/out-of-range pages, parameter validation, and bounded employee/lookup loading without writes. Search tests cover both fields/OR matching, case conversion, literal wildcards/escapes/quotes, blank normalization, Unicode length, matching totals, and bounded reads. Filter tests cover individual/all combined conditions, OR/AND precedence, normalization and catalog validation, repeated/blank/unknown inputs, filtered totals, and bounded query counts. Sorting tests cover all six fields in both directions through plain/searched listings, ID ties across pages, numeric salary order, currency requirements, malformed/repeated values, access checks, and bounded reads. Analytics calculation/PostgreSQL tests cover independent totals/groups, separate currencies, exact averages and `HALF_EVEN` rounding, large totals/IDs, empty results, listing filter parity, aggregate-only reads, and a concurrent write after the grouped read. Analytics HTTP tests verify both grouping dimensions/defaults, exact JSON strings and integer counts, search/filter binding and normalization, empty data, duplicate/unsupported/invalid query parameters, authentication before validation, GET without CSRF, media types, and rejection of write methods.
-
-DTOs and the `/api/v1` boundary allow future evolution. Partial updates, ETags, cursor pagination, additional analytics, history, and RBAC require separately approved contracts. They are not implemented or promised by the current API.
-
-## References
-
-- [RFC 9457: Problem Details for HTTP APIs](https://www.rfc-editor.org/rfc/rfc9457.html)
-- [Spring Security CSRF and SPA integration](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html)
-- [Angular security and HttpClient CSRF integration](https://angular.dev/best-practices/security)
-- [Java 21 rounding modes](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/math/RoundingMode.html)
+References: [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html), [Spring SPA CSRF](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html), [Angular security](https://angular.dev/best-practices/security).

@@ -1,6 +1,6 @@
 # Test Coverage and Edge-Case Review
 
-**Step 23 — 2026-10-19.** Reviewed the approved [requirements](REQUIREMENTS.md), production boundaries, and existing assertions at baseline `0f1c37b`. This is a behavioral coverage map; line/branch coverage percentages were not measured. The full integration run from Step 22 remains recorded in [VERIFICATION.md](VERIFICATION.md).
+**Step 23 — 2026-10-19.** Reviewed the approved [requirements](REQUIREMENTS.md), production boundaries, and existing assertions at baseline `0f1c37b`. This is a behavioral coverage map; line/branch coverage percentages were not measured. Historical Step 22 and later complete-stack results are recorded in [VERIFICATION.md](VERIFICATION.md).
 
 ## Behavior Map
 
@@ -47,7 +47,7 @@ The targeted Maven command runs all unit tests and only the named integration su
 ## Remaining Verification Boundaries
 
 - Browser automation is currently local/ad hoc. A committed browser runner and CI integration would require a separate tooling decision.
-- Production asset serving, deep-link fallback, deployed HTTPS/session behavior and the deployed workflow still need delivery implementation/verification.
+- Production asset serving and deep-link fallback were subsequently verified in the local Docker setup; public hosting, deployed HTTPS/session behavior, and the public workflow remain pending.
 - Security review, realistic workload measurement and agreed performance targets remain the next quality/delivery work. Existing tests do not establish a load benchmark.
 - Memory-only drafts/query state are approved limitations. Salary history, CSV, deletion, advanced RBAC and currency conversion remain outside the current scope.
 
