@@ -65,7 +65,9 @@ Authenticated `GET /api/v1/reference-data` is implemented with string department
 
 Basic authenticated employee pagination is implemented with optional `page`/`size`, defaults `0`/`25`, page range `0..2147483647`, and size range `1..100`. Only single ASCII-digit values are accepted; unsupported/repeated parameters return `400`. Ordering is fixed to employee number/ID. Counts and offsets use long arithmetic, and an empty/out-of-range request returns empty items with actual totals. The service counts first, fetches only the requested in-range employees plus labels, and returns the existing employee representation in an application-owned envelope. Default read-only transaction isolation does not guarantee a snapshot across count/content or separate page requests.
 
-Search, filters, selectable sorting, and analytics remain approved contracts awaiting implementation. Their parameters are currently rejected instead of silently ignored. Query/index measurement, the 10,000-employee seed, and production runtime verification remain later steps.
+Literal case-insensitive search is implemented through optional `q`: strip surrounding Unicode whitespace; absent/blank means no search; cap normalized input at 200 Unicode code points and reject null characters. Search the full literal substring of employee number OR full name with PostgreSQL case conversion. Escape LIKE metacharacters with explicit `!`, bind the same pattern to shared-predicate count/content queries, and preserve fixed ordering and matching totals. Repeated `q` is rejected. No schema/dependency/index changes were required.
+
+Filters, selectable sorting, and analytics remain approved contracts awaiting implementation. Filter/sort parameters are currently rejected instead of silently ignored. Query/index measurement, the 10,000-employee seed, and production runtime verification remain later steps.
 
 ## Questions Awaiting Resolution
 

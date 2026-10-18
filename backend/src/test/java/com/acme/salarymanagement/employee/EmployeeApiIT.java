@@ -3,9 +3,11 @@ package com.acme.salarymanagement.employee;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -388,7 +390,7 @@ class EmployeeApiIT {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"q=private-search", "departmentId=1", "countryCode=IN", "currencyCode=USD",
+    @ValueSource(strings = {"departmentId=1", "countryCode=IN", "currencyCode=USD",
             "sort=employeeNumber,desc", "unexpected=private-value", "Page=1"})
     void rejectsUnsupportedParametersInsteadOfSilentlyIgnoringThem(String query) throws Exception {
         HttpResponse<String> response = get(URI.create(endpoint + "?" + query));
@@ -410,6 +412,111 @@ class EmployeeApiIT {
         cookies.getCookieStore().getCookies().stream().filter(cookie -> cookie.getName().equals("XSRF-TOKEN"))
                 .toList().forEach(cookie -> cookies.getCookieStore().remove(endpoint, cookie));
         assertPage(get(endpoint), 0, 25, 0, 0);
+        assertPage(get(searchUri("name")), 0, 25, 0, 0);
+    }
+
+    @Test
+    void searchesEmployeeNumberOrFullNameCaseInsensitivelyWithoutDuplicatesOrWrites() throws Exception {
+        insertSearchEmployee("EMP-ALPHA", "Asha Rao");
+        insertSearchEmployee("EMP-2", "Alpha Johnson");
+        insertSearchEmployee("EMP-ALPHA-3", "Alpha Both");
+        insertSearchEmployee("EMP-4", "Other Name");
+        var before = jdbc.queryForList("SELECT * FROM employees ORDER BY id");
+        assertSearchMatches("  AlPhA \t", "EMP-2", "EMP-ALPHA", "EMP-ALPHA-3");
+        assertSearchMatches("lPh", "EMP-2", "EMP-ALPHA", "EMP-ALPHA-3");
+        assertSearchMatches("emp-alp", "EMP-ALPHA", "EMP-ALPHA-3");
+        assertSearchMatches("sha ra", "EMP-ALPHA");
+        JsonNode first = assertPage(get(searchUri("sha ra")), 0, 25, 1, 1).path("items").get(0);
+        assertEquals(JSON.readTree(get(URI.create(endpoint + "/" + first.path("id").asString())).body()), first);
+        assertEquals(before, jdbc.queryForList("SELECT * FROM employees ORDER BY id"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"%", "_", "!", "\\", "'", "%_!\\", "' OR 1=1 --"})
+    void searchesWildcardsEscapeCharactersAndQuotesAsLiteralData(String term) throws Exception {
+        insertSearchEmployee("EMP-1", "Rate " + term + " Literal");
+        insertSearchEmployee("EMP-2", "Rate Anything Literal");
+        insertSearchEmployee("EMP-3", "Other Name");
+        assertSearchMatches(term, "EMP-1");
+        assertEquals(3L, countEmployees());
+    }
+
+    @Test
+    void underscoresInEmployeeNumbersAreLiteralAndNamesSupportUnicodeCaseMatching() throws Exception {
+        insertSearchEmployee("EMP_A", "Zoë 李");
+        insertSearchEmployee("EMPXA", "Other Name");
+        assertSearchMatches("_a", "EMP_A");
+        assertSearchMatches("ZOË", "EMP_A");
+        assertSearchMatches("李", "EMP_A");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "\t\n", "\u2003"})
+    void blankSearchBehavesLikeAnAbsentSearch(String term) throws Exception {
+        insertListingEmployees(3);
+        assertEquals(JSON.readTree(get(endpoint).body()), JSON.readTree(get(searchUri(term)).body()));
+    }
+
+    @Test
+    void searchLengthUsesUnicodeCodePointsAfterTrimming() throws Exception {
+        String name = "𠀀".repeat(200);
+        insertSearchEmployee("EMP-1", name);
+        assertSearchMatches(" " + name + " ", "EMP-1");
+        HttpResponse<String> response = get(searchUri(name + "李"));
+        JsonNode problem = assertProblem(response, 400, "VALIDATION_ERROR");
+        assertEquals("q", problem.path("errors").get(0).path("field").asString());
+        assertEquals("TOO_LONG", problem.path("errors").get(0).path("code").asString());
+        assertFalse(response.body().contains(name));
+    }
+
+    @Test
+    void searchPaginatesAndCountsOnlyMatchesIncludingPagesPastTheEnd() throws Exception {
+        for (int number = 7; number > 0; number--) {
+            insertSearchEmployee("EMP-%03d".formatted(number), (number % 2 == 1 ? "Matched" : "Other") + " Person " + number);
+        }
+        insertSearchEmployee("EMP-MATCH", "Unrelated Name");
+        List<String> listed = new java.util.ArrayList<>();
+        for (int page = 0; page < 3; page++) {
+            JsonNode result = assertPage(get(URI.create(searchUri("match") + "&page=" + page + "&size=2")), page, 2, 5, 3);
+            assertEquals(page < 2 ? 2 : 1, result.path("items").size());
+            result.path("items").valueStream().map(item -> item.path("employeeNumber").asString()).forEach(listed::add);
+        }
+        assertEquals(List.of("EMP-001", "EMP-003", "EMP-005", "EMP-007", "EMP-MATCH"), listed);
+        assertEquals(0, assertPage(get(URI.create(searchUri("match") + "&page=3&size=2")), 3, 2, 5, 3).path("items").size());
+        assertEquals(0, assertPage(get(URI.create(searchUri("match") + "&page=2147483647&size=100")),
+                Integer.MAX_VALUE, 100, 5, 1).path("items").size());
+        assertSearchMatches("no matching employee");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"q=alpha&q=beta", "q=alpha&q=alpha", "q=&q="})
+    void rejectsRepeatedSearchParameters(String query) throws Exception {
+        JsonNode problem = assertProblem(get(URI.create(endpoint + "?" + query)), 400, "VALIDATION_ERROR");
+        assertEquals("q", problem.path("errors").get(0).path("field").asString());
+    }
+
+    @Test
+    void authenticatesBeforeSearchValidation() throws Exception {
+        cookies.getCookieStore().removeAll();
+        assertProblem(get(searchUri("private search")), 401, "AUTHENTICATION_REQUIRED");
+        assertProblem(get(searchUri("a".repeat(201))), 401, "AUTHENTICATION_REQUIRED");
+    }
+
+    private URI searchUri(String term) {
+        return URI.create(endpoint + "?q=" + URLEncoder.encode(term, StandardCharsets.UTF_8));
+    }
+
+    private void assertSearchMatches(String term, String... numbers) throws Exception {
+        JsonNode result = assertPage(get(searchUri(term)), 0, 25, numbers.length, numbers.length == 0 ? 0 : 1);
+        assertEquals(List.of(numbers), result.path("items").valueStream()
+                .map(item -> item.path("employeeNumber").asString()).toList());
+    }
+
+    private void insertSearchEmployee(String number, String name) {
+        jdbc.update("""
+                INSERT INTO employees (employee_number, full_name, department_id, country_code, salary_amount, currency_code)
+                VALUES (?, ?, ?, 'IN', 12.345, 'KWD')
+                """, number, name, departmentId);
     }
 
     private void insertListingEmployees(int count) {

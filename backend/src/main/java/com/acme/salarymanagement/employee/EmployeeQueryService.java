@@ -23,13 +23,25 @@ public class EmployeeQueryService {
 
     @Transactional(readOnly = true)
     public EmployeePageResult list(EmployeePageRequest request) {
-        long total = employees.count();
+        String pattern = literalPattern(request.q());
+        long total = pattern == null ? employees.count() : employees.countMatching(pattern);
         long totalPages = total / request.size() + (total % request.size() == 0 ? 0 : 1);
         long offset = (long) request.page() * request.size();
         // Skip empty pages before asking JPA to represent an unnecessarily large offset.
-        List<EmployeeResult> items = offset >= total ? List.of()
-                : employees.findAllBy(PageRequest.of(request.page(), request.size(), Sort.by("employeeNumber", "id")))
-                        .stream().map(Employee::toResult).toList();
+        List<EmployeeResult> items = List.of();
+        if (offset < total) {
+            PageRequest page = PageRequest.of(request.page(), request.size(), Sort.by("employeeNumber", "id"));
+            List<Employee> matches = pattern == null ? employees.findAllBy(page) : employees.findMatching(pattern, page);
+            items = matches.stream().map(Employee::toResult).toList();
+        }
         return new EmployeePageResult(items, request.page(), request.size(), total, totalPages);
+    }
+
+    private static String literalPattern(String query) {
+        if (query == null) {
+            return null;
+        }
+        // Escape the escape character first so later wildcard escapes remain intact.
+        return "%" + query.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
     }
 }
