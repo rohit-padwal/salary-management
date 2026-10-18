@@ -1,6 +1,6 @@
 # Employee Salary Data Model
 
-**Status:** Approved project design for the MVP, subject to Incubyte clarification. The schema/reference records, JPA mappings, and employee creation/retrieval/editing through HTTP/service/persistence are implemented and verified against PostgreSQL 18.6. Server-side paginated employee search and department/country/currency filters are also implemented. Allowlisted sorting and the compensation analytics service/group query are implemented; analytics HTTP integration remains a future step.
+**Status:** Approved project design for the MVP, subject to Incubyte clarification. The schema/reference records, JPA mappings, and employee creation/retrieval/editing through HTTP/service/persistence are implemented and verified against PostgreSQL 18.6. Server-side paginated employee search and department/country/currency filters are also implemented. Allowlisted sorting and compensation analytics through HTTP/service/grouped SQL are implemented.
 
 ## Context and Scope
 
@@ -107,9 +107,11 @@ The initial migration test was run before the SQL existed and failed because zer
 
 `EmployeeApiIT` additionally verifies committed creation and duplicate/concurrent conflicts through the authenticated, CSRF-protected endpoint, with exact string serialization and validation/no-write behavior. It follows resource locations across currencies, compares unchanged database records after reads, and checks invalid IDs, missing employees, and authentication before lookup. HTTP DTOs and retrieval add no schema changes.
 
-Editing tests additionally verify full replacement, metadata/version changes, currency/amount validation, rollback of invalid/duplicate updates, missing targets, stale browser versions, and concurrent updates. Coordinated persistence tests cover both competing writers and commit-time conflicts for unchanged submissions. No schema migration was needed for editing. Pagination/search/filter/sort are implemented. The analytics service is implemented; its HTTP endpoint remains a later step.
+Editing tests additionally verify full replacement, metadata/version changes, currency/amount validation, rollback of invalid/duplicate updates, missing targets, stale browser versions, and concurrent updates. Coordinated persistence tests cover both competing writers and commit-time conflicts for unchanged submissions. No schema migration was needed for editing. Pagination/search/filter/sort and the analytics service/HTTP endpoint are implemented.
 
 `CompensationAnalyticsIT` verifies exact SQL group sums/counts/minimums/maximums for department/country, separate currencies, listing filter/search parity, large aggregate totals and string IDs, no-match data, and one grouped read returning aggregate rows rather than employee entities. A coordinated transaction updates salary after aggregation and verifies group/currency summaries still agree on the captured values. Calculation unit tests verify weighted averages and single `HALF_EVEN` rounding without reusing rounded subgroup averages. No schema or applied migration was changed for analytics.
+
+`CompensationAnalyticsApiIT` additionally verifies the read-only HTTP contract against PostgreSQL, including currency-scale strings, exact large department IDs and aggregate totals, both grouping dimensions, validated filters, empty data, and access enforcement. Adding the HTTP adapter required no schema changes.
 
 ## Future Expansion
 

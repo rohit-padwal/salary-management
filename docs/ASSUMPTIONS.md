@@ -73,13 +73,13 @@ Allowlisted sorting is implemented through optional `sort=field,direction`: the 
 
 The analytics service and grouped PostgreSQL read are implemented. A shared `EmployeeReadCriteria` and catalog validator preserve listing normalization/escaping/filter semantics; listing page/sort behavior remains separate. One grouped SQL statement produces counts, exact totals/minimums/maximums and currency metadata. Java derives currency summaries from those captured aggregate rows and rounds averages once from exact totals/counts. No cross-currency monetary result or per-employee-range cap is applied to totals. Groups order by numeric department ID or country code, then currency; summaries order by currency. A coordinated write-after-read test verifies both result levels retain the grouped read.
 
-The analytics HTTP contract remains awaiting implementation: parameter parsing, string DTOs, controller, and endpoint access tests are not supplied by the service step. Query/index measurement, the 10,000-employee seed, and production runtime verification remain later steps.
+The analytics HTTP contract is implemented through an authenticated GET endpoint, strict parameter parsing, and dedicated string-valued money DTOs. Exact lowercase grouping names are accepted; absent grouping defaults to department. Duplicate parameters and unsupported pagination/sorting parameters are errors. HTTP tests cover response types/values, normalization, validation, empty data, and access behavior. Existing session, CSRF, and error policies are reused. Query/index measurement, the 10,000-employee seed, and production runtime verification remain later steps.
 
 ## Questions Awaiting Resolution
 
 **Incubyte clarification:** salary definition and components; required analytics and currency conversion; salary history; CSV import/export; authentication and access expectations; deployment requirements. The assessment says "AngularJS for Java"; modern Angular acceptance remains unconfirmed.
 
-**Before affected implementation:** any additional HR business salary maximum if required; frontend tool versions; query/index workload measurements and analytics HTTP integration; environment-specific deployment/security configuration; hosting constraints; and measurable performance targets. These are open implementation/product details, not extra features to add automatically. Local PostgreSQL is provided by Compose; a native PostgreSQL installation is not required.
+**Before affected implementation:** any additional HR business salary maximum if required; frontend tool versions; query/index workload measurements; environment-specific deployment/security configuration; hosting constraints; and measurable performance targets. These are open implementation/product details, not extra features to add automatically. Local PostgreSQL is provided by Compose; a native PostgreSQL installation is not required.
 
 ## Future Expansion and Trade-offs
 

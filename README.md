@@ -4,7 +4,7 @@ Employee salary management for an HR Manager overseeing 10,000 employees across 
 
 ## Current Status
 
-The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup and server-side paginated employee search with department/country/currency filters and allowlisted sorting are also available. Compensation analytics calculations are implemented as a Java service. The analytics HTTP endpoint, employee seeding, and the Angular UI remain planned.
+The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup and server-side paginated employee search with department/country/currency filters and allowlisted sorting are also available. Compensation analytics are available through an authenticated JSON endpoint. Employee seeding and the Angular UI remain planned.
 
 ## Backend Toolchain
 
@@ -187,9 +187,11 @@ Success returns `200` with the updated employee. An effective change advances it
 
 Invalid input returns `400`, a missing target `404`, a duplicate number `409 EMPLOYEE_NUMBER_CONFLICT`, and an outdated version/concurrent edit `409 STALE_EMPLOYEE`. Invalid or conflicting updates leave the employee unchanged. Reload after a stale conflict rather than retrying with an overwritten version. PUT does not create missing records or provide salary history.
 
-## Compensation Analytics Service
+## Compensation Analytics
 
-`CompensationAnalyticsService` supports department/country grouping with the same search and catalog filters as employee listing. It returns typed application results with headcount and separate-currency group/summary statistics. The HTTP endpoint, request parser, and JSON DTOs remain a separate implementation step.
+Send authenticated `GET /api/v1/analytics/compensation` for department grouping, or add `?groupBy=country`. Optional `q`, `departmentId`, `countryCode`, and `currencyCode` use the same rules as employee listing. For example: `/api/v1/analytics/compensation?groupBy=country&currencyCode=USD&countryCode=IN`. Each parameter may appear once; grouping names are exactly lowercase `department` or `country`. Pagination, sorting, and other unsupported parameters are rejected.
+
+The `200` JSON response contains `groupBy`, integer `totalHeadcount`, `currencySummaries`, and `groups`. Every summary/group contains `currencyCode`, integer `headcount`, and decimal-string `totalSalary`, `averageSalary`, `minSalary`, and `maxSalary`; groups also include string `groupKey` and `groupLabel`. Department keys remain exact ID strings. A session is required, with no CSRF cookie/header for GET. Invalid parameters return `400` field errors, missing authentication returns `401`, and unsupported write methods return `405` after security checks. Responses inherit the existing security cache prevention headers.
 
 PostgreSQL calculates group counts, sums, minimums, and maximums in one statement. Java combines only those aggregate rows into currency summaries and computes averages from exact totals/counts, rounding once with `HALF_EVEN` at currency precision. Totals/minimums/maximums remain exact, and totals may exceed the per-employee storage limit. No monetary total spans currencies. Empty results contain zero headcount and empty collections.
 
@@ -211,7 +213,9 @@ Creation and effective updates obtain latest-change metadata from PostgreSQL's t
 
 `CompensationRollupTest` checks weighted averages, avoiding rounded subgroup-average reuse, currency precision and `HALF_EVEN` boundaries, large totals, currency separation, and empty data. `CompensationAnalyticsIT` verifies both grouping dimensions against independent expected values, listing/filter/search parity, exact large IDs, PostgreSQL aggregation returning groups rather than employee entities, zero writes, and a coordinated writer committing between aggregation and rollup. Its 1,000-row fixture is an isolated query-shape check, not the production seed script or a workload benchmark.
 
-The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Analytics endpoints and the frontend remain future work.
+`CompensationAnalyticsApiIT` exercises the real authenticated HTTP endpoint against isolated PostgreSQL: independently expected group/summary JSON, currency-scale strings, large IDs/totals, search/filter binding, literal and Unicode search, empty data, strict query errors, authentication before parsing, GET without CSRF, unsupported response media types, and absent write handlers.
+
+The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script and the frontend remain future work.
 
 Flyway owns schema changes. Add new versioned migration files for changes after a migration has been committed/applied; do not rewrite completed migrations. Hibernate validates the schema at startup and does not generate it. Separate `schema.sql`/`data.sql` initialization and Open Session in View are disabled.
 
