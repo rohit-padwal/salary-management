@@ -18,26 +18,30 @@ The assessment was read in full before drafting [REQUIREMENTS.md](REQUIREMENTS.m
 | Management | List, search, filter, sort, add, and edit, with server-side pagination. | Supports daily HR maintenance without loading the full dataset into the browser. Exact query contracts remain open. |
 | Analytics | Predefined headcount and salary total, average, minimum, and maximum by department/country, with monetary groups separated by currency. | Provides a small, verifiable reporting scope. Combined filters, empty results, and rounding require defined behavior. |
 | Seeding | Exactly 10,000 realistic synthetic employees from a fixed seed. | Makes initial setup reproducible and avoids real personal data. This is the initial seed size, not an employee-count limit. |
-| Access | Protect sensitive salary-management operations; select a simple demo-access mechanism during architecture planning. | Authentication implementation is undecided; advanced RBAC is deferred. |
+| Access | One configured HR account with Spring Security session login; protect employee and analytics APIs, including reads. | Approved project architecture; credentials come from deployment configuration. Cookie/CSRF integration and session details require implementation design; advanced RBAC is deferred. |
 | Exclusions | Defer CSV import/export, payroll calculations, approval workflows, history, deletion, advanced RBAC, and conversion. | Keeps the MVP focused; these remain possible extensions rather than implementation commitments. |
 
-## Architecture Direction, Not a Completed Design
+## Approved Architecture Decisions
 
-Prefer Java, Spring Boot, modern Angular, and PostgreSQL in a modular monolith, following the user's direction. No application scaffolding, dependency selection, or schema design has been implemented or approved by this documentation step.
+The user approved the [architecture proposal](ARCHITECTURE.md): a modular monolith with feature boundaries, one Spring Boot backend project, Angular assets served by Spring Boot under one public origin, and PostgreSQL. Frontend and backend production releases are coupled; development uses the Angular server with an API proxy.
 
-Keep responsibilities clear between employee management, compensation, analytics, persistence/infrastructure, and access control. Use straightforward boundaries rather than speculative interfaces or distributed services. These boundaries should allow later features to be introduced, but do not guarantee that future requirements will require no refactoring.
+Keep clear employee, compensation, analytics, infrastructure, and security responsibilities. Use controllers, services, repositories, DTOs, and straightforward mapping where needed within features. Analytics may use read-only database projections across employee/compensation tables; this internal schema coupling is accepted. Schema ownership remains for Step 6.
+
+Spring Security is approved for single-account session login/logout, protected reads and writes, and CSRF integration with Angular. HTTP-only authentication cookies, secure deployment cookies, and an explicit same-site policy are part of the design. No identity provider, account administration, or advanced RBAC is introduced.
+
+Prefer Java 21, Spring Boot, modern Angular, and PostgreSQL. Version selection, dependency installation, scaffolding, data model, API contracts, and implementation remain separate approval steps. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
 
 ## Questions Awaiting Resolution
 
 **Incubyte clarification:** salary definition and components; required analytics and currency conversion; salary history; CSV import/export; authentication and access expectations; deployment requirements. The assessment says "AngularJS for Java"; modern Angular acceptance remains unconfirmed.
 
-**Before affected implementation:** identifier rules; supported countries/currencies; salary precision, maximum, and rounding; field lengths and required values; pagination/sorting/search behavior; analytics grouping and empty-result behavior; update-conflict handling; demo access; hosting constraints; and measurable performance targets. These are open design decisions, not extra features to implement automatically.
+**Before affected implementation:** identifier rules; supported countries/currencies; salary precision, maximum, and rounding; field lengths and required values; pagination/sorting/search behavior; analytics grouping and empty-result behavior; update-conflict handling; session/cookie details and CSRF integration; hosting constraints; and measurable performance targets. These are open design decisions, not extra features to implement automatically.
 
 ## Future Expansion and Trade-offs
 
 - Current-value editing keeps the first model small but provides no salary history or audit trail. History would require effective dates and additional persistence rules.
 - Separate-currency reporting preserves correctness but cannot produce a single organization-wide monetary total. Conversion would require rates, effective dates, and rounding policy.
-- Simple protected access can support a demo; multiple roles would require an explicit authorization model and tests.
+- Single-account session login supports the demo but provides no individual attribution. In-memory sessions are lost on restart; multiple instances would require a session strategy. Multiple roles would require an explicit authorization model and tests.
 - Database pagination and aggregation support the current dataset. Larger-scale readiness must be measured; do not claim support for 100,000 or one million employees without evidence.
 - CSV workflows would need validation, duplicate handling, and failure semantics. Payroll and approval workflows would require separately agreed business rules.
 
@@ -45,9 +49,6 @@ Keep responsibilities clear between employee management, compensation, analytics
 
 Compare the response with this register, identify impacts, and present proposed changes for user approval before modifying scope or implementation. Update both documents together where needed. Preserve genuine Git history; do not rewrite earlier decisions to imply they were known in advance.
 
-## AI-Assisted Decision Record for This Step
+## AI-Assisted Decision Record
 
-- The assistant read all three assessment pages and proposed a one-page scope draft and clarification questions.
-- The user reported contacting Incubyte, supplied provisional assumptions, and authorized proceeding without waiting for a reply.
-- The assistant inspected the empty repository and presented the revised requirements and a two-file documentation plan.
-- The user approved continuation and supplied the configured GitHub remote. This step saves the baseline and assumptions only; verification and Git outcomes are reported from actual commands.
+See [AI_USAGE.md](AI_USAGE.md) for the consolidated prompts, decisions, corrections, and verification record. Approval of the requirements and architecture does not authorize application implementation or later roadmap steps.
