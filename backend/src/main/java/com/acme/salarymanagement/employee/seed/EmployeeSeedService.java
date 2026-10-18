@@ -23,11 +23,25 @@ public class EmployeeSeedService {
 
     @Transactional
     public int seed() {
-        // Serialize seed attempts and block employee writes until the empty check/load commits.
-        jdbc.execute("LOCK TABLE employees IN SHARE ROW EXCLUSIVE MODE");
-        if (jdbc.queryForObject("SELECT count(*) FROM employees", Long.class) != 0) {
+        if (lockAndCountEmployees() != 0) {
             throw new IllegalStateException("Seed requires an empty employee table; existing records were left unchanged.");
         }
+        return insertSeed();
+    }
+
+    @Transactional
+    public int seedIfEmpty() {
+        // Demo restarts preserve all existing records, including HR edits and additions.
+        return lockAndCountEmployees() == 0 ? insertSeed() : 0;
+    }
+
+    private long lockAndCountEmployees() {
+        // The same transaction holds the lock through the empty check and complete batch load.
+        jdbc.execute("LOCK TABLE employees IN SHARE ROW EXCLUSIVE MODE");
+        return jdbc.queryForObject("SELECT count(*) FROM employees", Long.class);
+    }
+
+    private int insertSeed() {
         Map<String, Long> departments = new HashMap<>();
         jdbc.query("SELECT name, id FROM departments", row -> {
             departments.put(row.getString("name"), row.getLong("id"));

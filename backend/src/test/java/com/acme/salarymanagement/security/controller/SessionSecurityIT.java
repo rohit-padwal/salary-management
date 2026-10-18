@@ -102,6 +102,15 @@ class SessionSecurityIT {
         assertProblem(get("/api/v1/auth/session"), 401, "AUTHENTICATION_REQUIRED", "/api/v1/auth/session");
     }
 
+    @Test
+    void publicReadinessReturnsOnlyStatusWithoutCreatingAnAuthenticatedSession() throws Exception {
+        HttpResponse<String> response = get("/api/v1/health");
+        assertEquals(200, response.statusCode());
+        assertEquals("{\"status\":\"UP\"}", response.body());
+        assertFalse(cookies.getCookieStore().getCookies().stream().anyMatch(cookie -> cookie.getName().equals("JSESSIONID")));
+        assertProblem(get("/api/v1/employees"), 401, "AUTHENTICATION_REQUIRED", "/api/v1/employees");
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"/api/v1/employees", "/api/v1/reference-data", "/api/v1/analytics/compensation", "/api/v1/auth/session"})
     void protectsApiReadsWithJsonErrorsEvenWhenBrowserRequestsHtml(String path) throws Exception {

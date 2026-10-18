@@ -8,3 +8,4 @@ AI-assisted employee directory: server paging/search, exact salary display, and 
 AI-assisted employee creation UI: exact salary validation, CSRF-protected saves, safe field errors, and server-confirmed results.
 AI-assisted employee editing UI: shared form, original-version updates, explicit stale-draft recovery, and browser verification.
 AI-assisted compensation analytics UI: exact currency-separated reports, applied filters, safe recovery, and browser verification.
+AI-assisted reviewer Docker setup: complete same-origin stack, opt-in transactional seed-once startup, readiness gating, and restart/workflow verification.

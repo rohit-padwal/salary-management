@@ -1,22 +1,56 @@
-name: salary-management
+name: salary-management-demo
 
 services:
   db:
     image: postgres:18.6
     environment:
-      POSTGRES_DB: salary_management
-      POSTGRES_USER: ${DB_USERNAME:?Set DB_USERNAME in .env or the environment}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env or the environment}
-    ports:
-      - "127.0.0.1:${DB_PORT:-5432}:5432"
+      POSTGRES_DB: salary_demo
+      POSTGRES_USER: salary_demo
+      POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD:-demo-database-only}
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      test: ["CMD-SHELL", "pg_isready -U salary_demo -d salary_demo"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
       start_period: 10s
+
+  backend:
+    build: ./backend
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/salary_demo
+      DB_USERNAME: salary_demo
+      DB_PASSWORD: ${DEMO_DB_PASSWORD:-demo-database-only}
+      HR_USERNAME: demo.hr
+      # Intentionally public demo account; this hash is not a production credential.
+      HR_PASSWORD_HASH: '$$2y$$12$$PYqiejsAFBp7yWBGgTtQc.kNnv8TMwW0l2vE370HtIvdZd/8gdzVK'
+      SPRING_PROFILES_ACTIVE: local
+      APP_DEMO_SEED_ENABLED: "true"
+    ports:
+      - "127.0.0.1:${DEMO_BACKEND_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:${DEMO_FRONTEND_PORT:-4200}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
 volumes:
   postgres_data:

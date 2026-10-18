@@ -101,6 +101,27 @@ class EmployeeSeedIT {
     }
 
     @Test
+    void demoSeedingRunsOnceAndPreservesExistingHrChanges() {
+        assertEquals(10_000, seeds.seedIfEmpty());
+        jdbc.update("UPDATE employees SET full_name = 'Demo HR edit', salary_amount = 123456 WHERE employee_number = 'SYN-000001'");
+        var before = jdbc.queryForList("SELECT * FROM employees ORDER BY id");
+        assertEquals(0, seeds.seedIfEmpty());
+        assertEquals(before, jdbc.queryForList("SELECT * FROM employees ORDER BY id"));
+    }
+
+    @Test
+    void concurrentDemoSeedingCreatesOnlyOneCompleteDataset() throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> { assertTrue(start.await(5, TimeUnit.SECONDS)); return seeds.seedIfEmpty(); });
+            var second = executor.submit(() -> { assertTrue(start.await(5, TimeUnit.SECONDS)); return seeds.seedIfEmpty(); });
+            start.countDown();
+            assertEquals(List.of(0, 10_000), java.util.stream.Stream.of(first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS)).sorted().toList());
+        }
+        assertEquals(10_000L, employeeCount());
+    }
+
+    @Test
     void refusesAnyExistingEmployeeEvenWhenItIsNotPartOfTheSyntheticDataset() {
         jdbc.update("""
                 INSERT INTO employees (employee_number, full_name, department_id, country_code, currency_code, salary_amount)
@@ -221,6 +242,7 @@ class EmployeeSeedIT {
         builder.environment().put("DB_URL", POSTGRES.getJdbcUrl());
         builder.environment().put("DB_USERNAME", POSTGRES.getUsername());
         builder.environment().put("DB_PASSWORD", POSTGRES.getPassword());
+        builder.environment().put("APP_DEMO_SEED_ENABLED", "true");
         // A non-web seed command does not need an HR login account.
         builder.environment().remove("HR_USERNAME");
         builder.environment().remove("HR_PASSWORD_HASH");
