@@ -390,8 +390,7 @@ class EmployeeApiIT {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"departmentId=1", "countryCode=IN", "currencyCode=USD",
-            "sort=employeeNumber,desc", "unexpected=private-value", "Page=1"})
+    @ValueSource(strings = {"sort=employeeNumber,desc", "unexpected=private-value", "Page=1"})
     void rejectsUnsupportedParametersInsteadOfSilentlyIgnoringThem(String query) throws Exception {
         HttpResponse<String> response = get(URI.create(endpoint + "?" + query));
         JsonNode problem = assertProblem(response, 400, "VALIDATION_ERROR");
@@ -413,6 +412,7 @@ class EmployeeApiIT {
                 .toList().forEach(cookie -> cookies.getCookieStore().remove(endpoint, cookie));
         assertPage(get(endpoint), 0, 25, 0, 0);
         assertPage(get(searchUri("name")), 0, 25, 0, 0);
+        assertPage(get(URI.create(endpoint + "?countryCode=IN")), 0, 25, 0, 0);
     }
 
     @Test
@@ -500,6 +500,154 @@ class EmployeeApiIT {
         cookies.getCookieStore().removeAll();
         assertProblem(get(searchUri("private search")), 401, "AUTHENTICATION_REQUIRED");
         assertProblem(get(searchUri("a".repeat(201))), 401, "AUTHENTICATION_REQUIRED");
+    }
+
+    @Test
+    void filtersCombineWithSearchAndNormalizeCatalogCodes() throws Exception {
+        insertFilterEmployees();
+        String filters = "departmentId=000" + departmentId + "&countryCode=%20in%20&currencyCode=%20usd%20";
+        assertFilteredNumbers(filters + "&q=MaTcH", "MATCH-007");
+        assertFilteredNumbers(filters + "&q=%20%20", "MATCH-007");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "0,EMP-000|EMP-002|EMP-004|EMP-006|MATCH-001|MATCH-003|MATCH-005|MATCH-007",
+            "1,MATCH-001|MATCH-003|MATCH-005|MATCH-007",
+            "2,EMP-002|EMP-006|MATCH-003|MATCH-007",
+            "3,MATCH-003|MATCH-007",
+            "4,EMP-004|EMP-006|MATCH-005|MATCH-007",
+            "5,MATCH-005|MATCH-007",
+            "6,EMP-006|MATCH-007",
+            "7,MATCH-007"})
+    void combinesEveryFilterSubsetWithAndAndGroupsSearchOrCorrectly(int filters, String expectedNumbers) throws Exception {
+        insertFilterEmployees();
+        var before = jdbc.queryForList("SELECT * FROM employees ORDER BY id");
+        List<String> parameters = new java.util.ArrayList<>();
+        if ((filters & 1) != 0) {
+            parameters.add("departmentId=" + departmentId);
+        }
+        if ((filters & 2) != 0) {
+            parameters.add("countryCode=IN");
+        }
+        if ((filters & 4) != 0) {
+            parameters.add("currencyCode=USD");
+        }
+        String query = String.join("&", parameters);
+        String[] expected = expectedNumbers.split("\\|");
+        assertFilteredNumbers(query, expected);
+        assertFilteredNumbers(query.isEmpty() ? "q=match" : query + "&q=match", expected);
+        assertEquals(before, jdbc.queryForList("SELECT * FROM employees ORDER BY id"));
+    }
+
+    @Test
+    void filteredPaginationUsesMatchingTotalsAndHandlesPagesPastTheEnd() throws Exception {
+        insertFilterEmployees();
+        String query = "departmentId=" + departmentId + "&q=match&size=3";
+        JsonNode first = assertPage(get(URI.create(endpoint + "?" + query)), 0, 3, 4, 2);
+        assertEquals(List.of("MATCH-001", "MATCH-003", "MATCH-005"), first.path("items").valueStream()
+                .map(item -> item.path("employeeNumber").asString()).toList());
+        JsonNode last = assertPage(get(URI.create(endpoint + "?" + query + "&page=1")), 1, 3, 4, 2);
+        assertEquals("MATCH-007", last.path("items").get(0).path("employeeNumber").asString());
+        assertEquals(1, last.path("items").size());
+        assertEquals(0, assertPage(get(URI.create(endpoint + "?" + query + "&page=2")), 2, 3, 4, 2).path("items").size());
+        assertEquals(0, assertPage(get(URI.create(endpoint + "?" + query + "&page=2147483647")),
+                Integer.MAX_VALUE, 3, 4, 2).path("items").size());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"countryCode=JP", "currencyCode=JPY"})
+    void supportedFiltersWithNoEmployeesReturnEmptyPages(String query) throws Exception {
+        insertFilterEmployees();
+        assertEquals(0, assertPage(get(URI.create(endpoint + "?" + query)), 0, 25, 0, 0).path("items").size());
+        assertEquals(0, assertPage(get(URI.create(endpoint + "?" + query + "&q=match")), 0, 25, 0, 0).path("items").size());
+    }
+
+    @Test
+    void supportedFiltersWorkWithAnEmptyEmployeeTable() throws Exception {
+        assertFilteredNumbers("departmentId=" + departmentId + "&countryCode=IN&currencyCode=USD");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"departmentId", "countryCode", "currencyCode"})
+    void rejectsSuppliedBlankFiltersInsteadOfTreatingThemAsAbsent(String field) throws Exception {
+        for (String blank : List.of("", " ", "\t\n")) {
+            assertFilterError(get(filterUri(field, blank)), field, "REQUIRED");
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"departmentId,0,MUST_BE_POSITIVE", "departmentId,-1,INVALID_FORMAT",
+            "departmentId,+1,INVALID_FORMAT", "departmentId,1.0,INVALID_FORMAT", "departmentId,1e0,INVALID_FORMAT",
+            "departmentId,9223372036854775808,OUT_OF_RANGE", "departmentId,١,INVALID_FORMAT",
+            "departmentId,9223372036854775807,UNKNOWN_REFERENCE",
+            "countryCode,I,INVALID_FORMAT", "countryCode,USA,INVALID_FORMAT", "countryCode,12,INVALID_FORMAT",
+            "countryCode,ß,INVALID_FORMAT", "countryCode,ZZ,UNKNOWN_REFERENCE",
+            "currencyCode,US,INVALID_FORMAT", "currencyCode,USDD,INVALID_FORMAT", "currencyCode,U$D,INVALID_FORMAT",
+            "currencyCode,ßßß,INVALID_FORMAT", "currencyCode,ZZZ,UNKNOWN_REFERENCE"})
+    void rejectsMalformedAndUnknownFiltersEvenWithoutEmployees(String field, String value, String code) throws Exception {
+        assertFilterError(get(filterUri(field, value)), field, code);
+        assertEquals(0L, countEmployees());
+    }
+
+    @Test
+    void departmentFilterRejectsSurroundingWhitespaceAndUnknownCodesRemainErrorsWithNoSearchMatches() throws Exception {
+        assertFilterError(get(filterUri("departmentId", " " + departmentId)), "departmentId", "INVALID_FORMAT");
+        assertFilterError(get(filterUri("departmentId", departmentId + " ")), "departmentId", "INVALID_FORMAT");
+        insertFilterEmployees();
+        assertFilterError(get(URI.create(searchUri("no matches") + "&countryCode=ZZ")), "countryCode", "UNKNOWN_REFERENCE");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"departmentId", "countryCode", "currencyCode"})
+    void rejectsRepeatedFilterParameters(String field) throws Exception {
+        String value = switch (field) {
+            case "departmentId" -> Long.toString(departmentId);
+            case "countryCode" -> "IN";
+            default -> "USD";
+        };
+        for (String secondValue : List.of(value, "")) {
+            assertFilterError(get(URI.create(endpoint + "?" + field + "=" + value + "&" + field + "=" + secondValue)),
+                    field, "SINGLE_VALUE_REQUIRED");
+        }
+    }
+
+    @Test
+    void authenticatesBeforeFilterParsingOrCatalogLookup() throws Exception {
+        cookies.getCookieStore().removeAll();
+        assertProblem(get(URI.create(endpoint + "?departmentId=-1")), 401, "AUTHENTICATION_REQUIRED");
+        assertProblem(get(URI.create(endpoint + "?countryCode=ZZ")), 401, "AUTHENTICATION_REQUIRED");
+    }
+
+    private void insertFilterEmployees() {
+        long finance = jdbc.queryForObject("SELECT id FROM departments WHERE name = 'Finance'", Long.class);
+        for (int combination = 7; combination >= 0; combination--) {
+            boolean matchesNumber = combination % 2 == 1;
+            String number = (matchesNumber ? "MATCH-" : "EMP-") + "%03d".formatted(combination);
+            String name = (matchesNumber ? "Other Person " : "Match Person ") + combination;
+            jdbc.update("""
+                    INSERT INTO employees (employee_number, full_name, department_id, country_code, salary_amount, currency_code)
+                    VALUES (?, ?, ?, ?, 100, ?)
+                    """, number, name, (combination & 1) != 0 ? departmentId : finance,
+                    (combination & 2) != 0 ? "IN" : "US", (combination & 4) != 0 ? "USD" : "INR");
+        }
+    }
+
+    private void assertFilteredNumbers(String query, String... expectedNumbers) throws Exception {
+        URI uri = query.isEmpty() ? endpoint : URI.create(endpoint + "?" + query);
+        JsonNode result = assertPage(get(uri), 0, 25, expectedNumbers.length, expectedNumbers.length == 0 ? 0 : 1);
+        assertEquals(List.of(expectedNumbers), result.path("items").valueStream()
+                .map(item -> item.path("employeeNumber").asString()).toList());
+    }
+
+    private URI filterUri(String field, String value) {
+        return URI.create(endpoint + "?" + field + "=" + URLEncoder.encode(value, StandardCharsets.UTF_8));
+    }
+
+    private void assertFilterError(HttpResponse<String> response, String field, String code) {
+        JsonNode problem = assertProblem(response, 400, "VALIDATION_ERROR");
+        assertEquals(field, problem.path("errors").get(0).path("field").asString());
+        assertEquals(code, problem.path("errors").get(0).path("code").asString());
     }
 
     private URI searchUri(String term) {

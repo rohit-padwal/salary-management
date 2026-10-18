@@ -13,8 +13,12 @@ import org.springframework.data.repository.query.Param;
 
 interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
-    String SEARCH_PREDICATE = "lower(e.employeeNumber) like lower(:pattern) escape '!' "
-            + "or lower(e.fullName) like lower(:pattern) escape '!'";
+    // Explicit casts keep a missing search pattern usable by PostgreSQL lower().
+    String MATCH_PREDICATE = "(:pattern is null or (lower(e.employeeNumber) like lower(cast(:pattern as String)) escape '!' "
+            + "or lower(e.fullName) like lower(cast(:pattern as String)) escape '!')) "
+            + "and (:departmentId is null or e.department.id = :departmentId) "
+            + "and (:countryCode is null or e.country.code = :countryCode) "
+            + "and (:currencyCode is null or e.currency.code = :currencyCode)";
 
     @Override
     @EntityGraph(attributePaths = {"department", "country", "currency"})
@@ -23,12 +27,14 @@ interface EmployeeRepository extends JpaRepository<Employee, Long> {
     @EntityGraph(attributePaths = {"department", "country", "currency"})
     List<Employee> findAllBy(Pageable pageable);
 
-    @Query("select count(e) from Employee e where " + SEARCH_PREDICATE)
-    long countMatching(@Param("pattern") String pattern);
+    @Query("select count(e) from Employee e where " + MATCH_PREDICATE)
+    long countMatching(@Param("pattern") String pattern, @Param("departmentId") Long departmentId,
+            @Param("countryCode") String countryCode, @Param("currencyCode") String currencyCode);
 
     @EntityGraph(attributePaths = {"department", "country", "currency"})
-    @Query("select e from Employee e where " + SEARCH_PREDICATE)
-    List<Employee> findMatching(@Param("pattern") String pattern, Pageable pageable);
+    @Query("select e from Employee e where " + MATCH_PREDICATE)
+    List<Employee> findMatching(@Param("pattern") String pattern, @Param("departmentId") Long departmentId,
+            @Param("countryCode") String countryCode, @Param("currencyCode") String currencyCode, Pageable pageable);
 
     @Lock(LockModeType.OPTIMISTIC)
     Optional<Employee> findForEditById(Long id);

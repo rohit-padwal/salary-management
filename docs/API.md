@@ -1,6 +1,6 @@
 # API Contracts and Business Rules
 
-**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`), retrieval/editing (`GET`/`PUT /api/v1/employees/{id}`), reference-data lookup (`GET /api/v1/reference-data`), and authentication/session/CSRF endpoints are implemented and tested. Paginated employee search is implemented; filtering, selectable sorting, and analytics remain unimplemented. Analytics paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
+**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`), retrieval/editing (`GET`/`PUT /api/v1/employees/{id}`), reference-data lookup (`GET /api/v1/reference-data`), and authentication/session/CSRF endpoints are implemented and tested. Paginated employee search and department/country/currency filtering are implemented; selectable sorting and analytics remain unimplemented. Analytics paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
 
 ## Conventions
 
@@ -25,7 +25,7 @@ Use JSON REST endpoints under `/api/v1`, with explicit request/response DTOs. Pa
 
 There is no employee deletion, partial-update, or separate salary-update endpoint in the MVP. `PUT` updates an existing employee; a missing employee returns `404` rather than creating a record.
 
-Creation, retrieval, full editing by ID, and reference-data lookup are currently implemented in this table. Paginated listing and literal case-insensitive search are also implemented. The creation `Location` can be followed to retrieve the record. Filter/selectable-sort parts of the listing contract remain future work, as detailed below.
+Creation, retrieval, full editing by ID, and reference-data lookup are currently implemented in this table. Paginated listing, literal case-insensitive search, and department/country/currency filtering are also implemented. The creation `Location` can be followed to retrieve the record. Selectable sorting remains future work, as detailed below.
 
 Retrieval requires authentication but no CSRF header. Parse path IDs with the same positive-`Long` helper used for creation's department ID: ASCII digits only, no signs/whitespace/decimal points/exponents, and no overflow. Leading zeros are accepted. Invalid values return `400 VALIDATION_ERROR` with field `id`; a valid missing ID returns `404 EMPLOYEE_NOT_FOUND`. Authentication is checked before parsing/lookup. A successful read returns the same response representation without changing salary, version, or timestamps.
 
@@ -81,21 +81,25 @@ An effective update returns `200` with a new persisted version/update timestamp,
 
 ## Listing Contract
 
-### Implemented Pagination and Search
+### Implemented Pagination, Search, and Filters
 
-Authenticated `GET /api/v1/employees` currently accepts `page`, `size`, and optional `q`, once each. Pagination defaults are `0` and `25`; page is within `0..2147483647`, and size within `1..100`. For page/size, parse ASCII digits only, accepting leading zeros and rejecting empty values, signs, whitespace, decimals, exponents, non-ASCII digits, and overflow. Return `400 VALIDATION_ERROR` for invalid/repeated parameters. Unsupported parameters, including reference filters and `sort`, return a generic query-field error without echoing their names/values. Authentication is checked before query validation; GET requires no CSRF token.
+Authenticated `GET /api/v1/employees` currently accepts `page`, `size`, optional `q`, and optional `departmentId`/`countryCode`/`currencyCode`, once each. Pagination defaults are `0` and `25`; page is within `0..2147483647`, and size within `1..100`. For page/size, parse ASCII digits only, accepting leading zeros and rejecting empty values, signs, whitespace, decimals, exponents, non-ASCII digits, and overflow. Return `400 VALIDATION_ERROR` for invalid/repeated parameters. Unsupported parameters, including `sort`, return a generic query-field error without echoing their names/values. Authentication is checked before query validation; GET requires no CSRF token.
 
 `q` is stripped of surrounding Unicode whitespace; missing/blank values mean no search. Its normalized length is at most 200 Unicode code points, matching employee-name length semantics. Excess length returns a `q` field error with `TOO_LONG`; null characters return `INVALID_FORMAT`; repeated values return `SINGLE_VALUE_REQUIRED`. Preserve internal spacing and search the whole literal substring of employee number OR full name. Case conversion for both fields and the bound pattern happens in PostgreSQL using the database collation. Match each employee once even if both fields match.
 
-The count and content queries share one JPQL predicate and use the same bound pattern. LIKE uses `!` as its explicit escape character: escape literal `!` first, then `%` and `_`, before adding surrounding substring wildcards. Backslashes and apostrophes remain literal parameter data. Empty search takes the existing unfiltered path. Example: `/api/v1/employees?q=asha&page=0&size=25`. Totals describe matching employees only; no matches return empty items and zero totals.
+The count and content queries share one JPQL predicate and use the same bound pattern. LIKE uses `!` as its explicit escape character: escape literal `!` first, then `%` and `_`, before adding surrounding substring wildcards. Backslashes and apostrophes remain literal parameter data. Empty search imposes no search restriction; absent search and filters take the existing unfiltered path. Example: `/api/v1/employees?q=asha&page=0&size=25`. Totals describe matching employees only; no matches return empty items and zero totals.
+
+Optional catalog filters combine with AND, with the employee-number/name OR expression parenthesized before filtering. `departmentId` uses the existing positive-Long parser: ASCII digits only, leading zeros accepted, no signs/whitespace/overflow. Country/currency filters use the same ASCII code validation and trim/uppercase normalization as writes. Missing parameters mean no filter; supplied blank values return `REQUIRED`, malformed values return their field validation error, and unsupported catalog records return `UNKNOWN_REFERENCE`. Repeated filter parameters return `SINGLE_VALUE_REQUIRED`, including repeated identical values. Errors do not echo rejected values.
+
+Catalog validation occurs before employee queries, including when there are no employees or no search matches. A valid supported value matching no employees returns an empty page, not a reference error. Country and currency are independent. Each supplied filter performs one catalog lookup; the count/content methods share one bound condition for search and all three filters. Nullable search patterns are explicitly cast to String before `lower()` to avoid the null-type inference failure found by PostgreSQL integration tests.
 
 The implemented response envelope contains `items`, `page`, `size`, `totalElements`, and `totalPages`. Items reuse the full employee response; metadata values are JSON integers. Ordering is fixed at `employeeNumber ASC, id ASC`. Empty databases have empty items and zero totals; out-of-range pages have empty items and actual totals. Counts and page offsets use long arithmetic. The service counts first and skips page fetching when its offset is beyond that count, including very large valid page numbers. In-range pages are bounded database reads with lookup labels fetched together.
 
-The read-only transaction uses the existing default isolation. A concurrent write between the count and page queries may change the visible rows, so the response is not a guaranteed snapshot; separate page requests likewise do not share a snapshot. Filters, selectable sorting, and new indexes remain outside this increment.
+The read-only transaction uses the existing default isolation. A concurrent write between the count and page queries may change the visible rows, so the response is not a guaranteed snapshot; separate page requests likewise do not share a snapshot. Selectable sorting and new indexes remain outside this increment.
 
-### Full Approved Listing Target — Remaining Parameters Are Planned
+### Approved Listing Contract — Selectable Sorting Is Planned
 
-Future example: `/api/v1/employees?page=0&size=25&q=asha&countryCode=IN&sort=fullName,asc`. This example is currently rejected because country filtering and selectable sorting are not implemented.
+Future example: `/api/v1/employees?page=0&size=25&q=asha&countryCode=IN&sort=fullName,asc`. This example is currently rejected because selectable sorting is not implemented.
 
 | Parameter | Behavior |
 | --- | --- |
@@ -224,7 +228,7 @@ Implemented tests cover:
 - Unauthenticated reads, generic login failure, session timeout, CSRF issuance/refresh, login/logout, and consistent security error bodies.
 - Complete ordered reference catalogs, exact string IDs/integer minor units, current database values, empty catalogs, read access without CSRF, and absence of catalog write handlers.
 
-Pagination tests cover defaults, traversal/totals, empty/out-of-range pages, parameter validation, and bounded employee/lookup loading without writes. Search tests cover both fields/OR matching, case conversion, literal wildcards/escapes/quotes, blank normalization, Unicode length, matching totals, and bounded reads. Filter/selectable-sorting tests and independently calculated analytics with separate currencies, empty results, and `HALF_EVEN` rounding remain planned. Their contracts do not imply those features are implemented.
+Pagination tests cover defaults, traversal/totals, empty/out-of-range pages, parameter validation, and bounded employee/lookup loading without writes. Search tests cover both fields/OR matching, case conversion, literal wildcards/escapes/quotes, blank normalization, Unicode length, matching totals, and bounded reads. Filter tests cover individual/all combined conditions, OR/AND precedence, normalization and catalog validation, repeated/blank/unknown inputs, filtered totals, and bounded query counts. Selectable-sorting tests and independently calculated analytics with separate currencies, empty results, and `HALF_EVEN` rounding remain planned. Their contracts do not imply those features are implemented.
 
 DTOs and the `/api/v1` boundary allow future evolution. Partial updates, ETags, cursor pagination, additional analytics, history, and RBAC require separately approved contracts. They are not implemented or promised by the current API.
 

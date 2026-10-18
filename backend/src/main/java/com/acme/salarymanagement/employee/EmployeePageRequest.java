@@ -1,11 +1,17 @@
 package com.acme.salarymanagement.employee;
 
 import com.acme.salarymanagement.validation.InputValidationException;
+import com.acme.salarymanagement.validation.ReferenceCode;
 
-public record EmployeePageRequest(int page, int size, String q) {
+public record EmployeePageRequest(int page, int size, String q,
+        Long departmentId, String countryCode, String currencyCode) {
 
     public EmployeePageRequest(int page, int size) {
         this(page, size, null);
+    }
+
+    public EmployeePageRequest(int page, int size, String q) {
+        this(page, size, q, null, null, null);
     }
 
     public EmployeePageRequest {
@@ -16,6 +22,15 @@ public record EmployeePageRequest(int page, int size, String q) {
             throw new InputValidationException("size", "OUT_OF_RANGE", "Size must be between 1 and 100.");
         }
         q = normalizeSearch(q);
+        if (departmentId != null && departmentId <= 0) {
+            throw new InputValidationException("departmentId", "MUST_BE_POSITIVE", "Select a supported department.");
+        }
+        if (countryCode != null) {
+            countryCode = ReferenceCode.normalize(countryCode, "countryCode", 2);
+        }
+        if (currencyCode != null) {
+            currencyCode = ReferenceCode.normalize(currencyCode, "currencyCode", 3);
+        }
     }
 
     private static String normalizeSearch(String value) {

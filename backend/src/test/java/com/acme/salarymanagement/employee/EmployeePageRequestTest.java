@@ -53,4 +53,44 @@ class EmployeePageRequestTest {
         assertEquals("q", failure.field());
         assertEquals("INVALID_FORMAT", failure.code());
     }
+
+    @Test
+    void normalizesOptionalCodesWithoutInferringCurrencyFromCountry() {
+        EmployeePageRequest request = new EmployeePageRequest(0, 25, null, 1L, " in ", " usd ");
+        assertEquals(1L, request.departmentId());
+        assertEquals("IN", request.countryCode());
+        assertEquals("USD", request.currencyCode());
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, -1})
+    void rejectsNonpositiveDepartmentFiltersFromNonHttpCallers(long id) {
+        InputValidationException failure = assertThrows(InputValidationException.class,
+                () -> new EmployeePageRequest(0, 25, null, id, null, null));
+        assertEquals("departmentId", failure.field());
+        assertEquals("MUST_BE_POSITIVE", failure.code());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"countryCode", "currencyCode"})
+    void suppliedBlankCodeFiltersAreInvalid(String field) {
+        for (String blank : new String[]{"", " ", "\t\n"}) {
+            InputValidationException failure = assertThrows(InputValidationException.class,
+                    () -> new EmployeePageRequest(0, 25, null, null,
+                            field.equals("countryCode") ? blank : null, field.equals("currencyCode") ? blank : null));
+            assertEquals(field, failure.field());
+            assertEquals("REQUIRED", failure.code());
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"countryCode,I", "countryCode,USA", "countryCode,12", "countryCode,ß",
+            "currencyCode,US", "currencyCode,USDD", "currencyCode,U$D", "currencyCode,ßßß"})
+    void validatesAsciiCodeShapeBeforeUppercasing(String field, String value) {
+        InputValidationException failure = assertThrows(InputValidationException.class,
+                () -> new EmployeePageRequest(0, 25, null, null,
+                        field.equals("countryCode") ? value : null, field.equals("currencyCode") ? value : null));
+        assertEquals(field, failure.field());
+        assertEquals("INVALID_FORMAT", failure.code());
+    }
 }

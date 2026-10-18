@@ -3,6 +3,7 @@ package com.acme.salarymanagement.employee;
 import java.util.Locale;
 
 import com.acme.salarymanagement.validation.InputValidationException;
+import com.acme.salarymanagement.validation.ReferenceCode;
 
 record EmployeeInput(String employeeNumber, String fullName, long departmentId,
         String countryCode, String salaryAmount, String currencyCode) {
@@ -23,18 +24,10 @@ record EmployeeInput(String employeeNumber, String fullName, long departmentId,
         if (command.departmentId() == null || command.departmentId() <= 0) {
             throw invalid("departmentId", "MUST_BE_POSITIVE", "Select a supported department.");
         }
-        String country = code(command.countryCode(), "countryCode", 2);
-        String currency = code(command.currencyCode(), "currencyCode", 3);
+        String country = ReferenceCode.normalize(command.countryCode(), "countryCode", 2);
+        String currency = ReferenceCode.normalize(command.currencyCode(), "currencyCode", 3);
         return new EmployeeInput(number.toUpperCase(Locale.ROOT), name, command.departmentId(),
                 country, command.salaryAmount(), currency);
-    }
-
-    private static String code(String value, String field, int length) {
-        String code = required(value, field);
-        if (!code.matches("[A-Za-z]{" + length + "}")) {
-            throw invalid(field, "INVALID_FORMAT", "Code must contain " + length + " ASCII letters.");
-        }
-        return code.toUpperCase(Locale.ROOT);
     }
 
     private static String required(String value, String field) {

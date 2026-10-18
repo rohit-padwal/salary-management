@@ -67,7 +67,9 @@ Basic authenticated employee pagination is implemented with optional `page`/`siz
 
 Literal case-insensitive search is implemented through optional `q`: strip surrounding Unicode whitespace; absent/blank means no search; cap normalized input at 200 Unicode code points and reject null characters. Search the full literal substring of employee number OR full name with PostgreSQL case conversion. Escape LIKE metacharacters with explicit `!`, bind the same pattern to shared-predicate count/content queries, and preserve fixed ordering and matching totals. Repeated `q` is rejected. No schema/dependency/index changes were required.
 
-Filters, selectable sorting, and analytics remain approved contracts awaiting implementation. Filter/sort parameters are currently rejected instead of silently ignored. Query/index measurement, the 10,000-employee seed, and production runtime verification remain later steps.
+Department/country/currency filters are implemented and combined with AND around the grouped search OR condition. Optional department IDs follow existing positive-Long syntax; codes share employee-write normalization. Provided filters must reference supported catalogs; blank, malformed, unknown, and repeated values return field errors. Missing filters impose no restriction. Each supplied catalog is validated before employee count/page queries, including empty/no-match cases. Country and currency remain independent. Count/content share the same parameterized condition, with an explicit text cast for a nullable search pattern.
+
+Selectable sorting and analytics remain approved contracts awaiting implementation. Sort parameters are currently rejected instead of silently ignored. Query/index measurement, the 10,000-employee seed, and production runtime verification remain later steps.
 
 ## Questions Awaiting Resolution
 

@@ -2,6 +2,10 @@ package com.acme.salarymanagement.employee;
 
 import java.util.List;
 
+import com.acme.salarymanagement.referencedata.CountryRepository;
+import com.acme.salarymanagement.referencedata.CurrencyRepository;
+import com.acme.salarymanagement.referencedata.DepartmentRepository;
+import com.acme.salarymanagement.validation.InputValidationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -11,9 +15,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class EmployeeQueryService {
 
     private final EmployeeRepository employees;
+    private final DepartmentRepository departments;
+    private final CountryRepository countries;
+    private final CurrencyRepository currencies;
 
-    EmployeeQueryService(EmployeeRepository employees) {
+    EmployeeQueryService(EmployeeRepository employees, DepartmentRepository departments,
+            CountryRepository countries, CurrencyRepository currencies) {
         this.employees = employees;
+        this.departments = departments;
+        this.countries = countries;
+        this.currencies = currencies;
     }
 
     @Transactional(readOnly = true)
@@ -23,18 +34,41 @@ public class EmployeeQueryService {
 
     @Transactional(readOnly = true)
     public EmployeePageResult list(EmployeePageRequest request) {
+        validateFilters(request);
         String pattern = literalPattern(request.q());
-        long total = pattern == null ? employees.count() : employees.countMatching(pattern);
+        boolean hasCriteria = pattern != null || request.departmentId() != null
+                || request.countryCode() != null || request.currencyCode() != null;
+        long total = hasCriteria
+                ? employees.countMatching(pattern, request.departmentId(), request.countryCode(), request.currencyCode())
+                : employees.count();
         long totalPages = total / request.size() + (total % request.size() == 0 ? 0 : 1);
         long offset = (long) request.page() * request.size();
         // Skip empty pages before asking JPA to represent an unnecessarily large offset.
         List<EmployeeResult> items = List.of();
         if (offset < total) {
             PageRequest page = PageRequest.of(request.page(), request.size(), Sort.by("employeeNumber", "id"));
-            List<Employee> matches = pattern == null ? employees.findAllBy(page) : employees.findMatching(pattern, page);
+            List<Employee> matches = hasCriteria
+                    ? employees.findMatching(pattern, request.departmentId(), request.countryCode(), request.currencyCode(), page)
+                    : employees.findAllBy(page);
             items = matches.stream().map(Employee::toResult).toList();
         }
         return new EmployeePageResult(items, request.page(), request.size(), total, totalPages);
+    }
+
+    private void validateFilters(EmployeePageRequest request) {
+        if (request.departmentId() != null) {
+            departments.findById(request.departmentId()).orElseThrow(() -> unknownReference("departmentId", "department"));
+        }
+        if (request.countryCode() != null) {
+            countries.findById(request.countryCode()).orElseThrow(() -> unknownReference("countryCode", "country"));
+        }
+        if (request.currencyCode() != null) {
+            currencies.findById(request.currencyCode()).orElseThrow(() -> unknownReference("currencyCode", "currency"));
+        }
+    }
+
+    private static InputValidationException unknownReference(String field, String label) {
+        return new InputValidationException(field, "UNKNOWN_REFERENCE", "Select a supported " + label + ".");
     }
 
     private static String literalPattern(String query) {

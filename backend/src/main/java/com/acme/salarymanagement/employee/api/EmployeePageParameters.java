@@ -3,13 +3,14 @@ package com.acme.salarymanagement.employee.api;
 import java.util.List;
 import java.util.Set;
 
+import com.acme.salarymanagement.api.PositiveId;
 import com.acme.salarymanagement.employee.EmployeePageRequest;
 import com.acme.salarymanagement.validation.InputValidationException;
 import org.springframework.util.MultiValueMap;
 
 final class EmployeePageParameters {
 
-    private static final Set<String> SUPPORTED = Set.of("page", "size", "q");
+    private static final Set<String> SUPPORTED = Set.of("page", "size", "q", "departmentId", "countryCode", "currencyCode");
 
     private EmployeePageParameters() {
     }
@@ -18,7 +19,11 @@ final class EmployeePageParameters {
         if (parameters.keySet().stream().anyMatch(key -> !SUPPORTED.contains(key))) {
             throw new InputValidationException("query", "UNSUPPORTED_PARAMETER", "Use only supported query parameters.");
         }
-        return new EmployeePageRequest(integer(parameters, "page", 0), integer(parameters, "size", 25), singleValue(parameters, "q"));
+        Long departmentId = parameters.containsKey("departmentId")
+                ? PositiveId.parse(singleValue(parameters, "departmentId"), "departmentId", "Department ID") : null;
+        return new EmployeePageRequest(integer(parameters, "page", 0), integer(parameters, "size", 25),
+                singleValue(parameters, "q"), departmentId,
+                singleValue(parameters, "countryCode"), singleValue(parameters, "currencyCode"));
     }
 
     private static int integer(MultiValueMap<String, String> parameters, String field, int defaultValue) {

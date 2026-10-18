@@ -276,6 +276,48 @@ class EmployeePersistenceIT {
         assertEquals(before, jdbc.queryForList("SELECT * FROM employees ORDER BY id"));
     }
 
+    @ParameterizedTest
+    @CsvSource({"0,2,2,5", "2,2,1,5", "3,2,0,4", "2147483647,100,0,4"})
+    void filteredSearchAddsOnlyCatalogValidationToBoundedEmployeeQueries(
+            int page, int size, int expectedItems, int expectedStatements) {
+        for (int number = 10; number > 0; number--) {
+            String name = number % 2 == 1 ? "Match Person " : "Other Person ";
+            service.create(command("EMP-%02d".formatted(number), name + number, "1000", "USD"));
+        }
+        long finance = jdbc.queryForObject("SELECT id FROM departments WHERE name = 'Finance'", Long.class);
+        service.create(new EmployeeDetails("OUT-DEPARTMENT", "Match Person", finance, "IN", "1000", "USD"));
+        service.create(new EmployeeDetails("OUT-COUNTRY", "Match Person", departmentId, "US", "1000", "USD"));
+        service.create(new EmployeeDetails("OUT-CURRENCY", "Match Person", departmentId, "IN", "1000", "INR"));
+        var before = jdbc.queryForList("SELECT * FROM employees ORDER BY id");
+        var statistics = context.getBean(EntityManagerFactory.class).unwrap(SessionFactory.class).getStatistics();
+        boolean originallyEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+        try {
+            EmployeePageResult result = context.getBean(EmployeeQueryService.class)
+                    .list(new EmployeePageRequest(page, size, "mAtCh", departmentId, " in ", " usd "));
+            assertEquals(5, result.totalElements());
+            assertEquals(size == 2 ? 3 : 1, result.totalPages());
+            assertEquals(expectedItems, result.items().size());
+            if (!result.items().isEmpty()) {
+                EmployeeResult first = result.items().getFirst();
+                assertEquals("EMP-%02d".formatted(page * size * 2 + 1), first.employeeNumber());
+                assertEquals("Engineering", first.departmentName());
+                assertEquals("India", first.countryName());
+                assertEquals("USD", first.currencyCode());
+                assertEquals(new BigDecimal("1000.00"), first.salaryAmount());
+            }
+            assertEquals(expectedStatements, statistics.getPrepareStatementCount());
+            assertEquals(expectedItems, statistics.getEntityStatistics(Employee.class.getName()).getLoadCount());
+            assertEquals(0, statistics.getEntityInsertCount());
+            assertEquals(0, statistics.getEntityUpdateCount());
+            assertEquals(0, statistics.getEntityDeleteCount());
+        } finally {
+            statistics.setStatisticsEnabled(originallyEnabled);
+        }
+        assertEquals(before, jdbc.queryForList("SELECT * FROM employees ORDER BY id"));
+    }
+
     @Test
     void twoTransactionsUsingTheSameLoadedVersionCannotBothCommit() throws Exception {
         EmployeeResult original = service.create(command("EMP-1", "Name", "1000", "USD"));
