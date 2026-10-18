@@ -30,6 +30,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -129,6 +130,85 @@ class CompensationAnalyticsApiIT {
             assertEquals(body, assertAnalytics(get(endpoint), "department", 8));
         }
         assertEquals(before, jdbc.queryForList("SELECT * FROM employees ORDER BY id"));
+    }
+
+    @Test
+    void employeeWritesUpdateDirectoryAndReportsWhileRejectedEditsPreserveBoth() throws Exception {
+        ObjectNode firstInput = JSON.createObjectNode().put("employeeNumber", "FLOW-1")
+                .put("fullName", "Zoë 李").put("departmentId", "1").put("countryCode", "IN")
+                .put("currencyCode", "USD").put("salaryAmount", "1000.01");
+        HttpResponse<String> createdResponse = writeEmployee("POST", "/api/v1/employees", firstInput);
+        assertEquals(201, createdResponse.statusCode(), createdResponse.body());
+        JsonNode created = JSON.readTree(createdResponse.body());
+        ObjectNode peerInput = firstInput.deepCopy().put("employeeNumber", "FLOW-2")
+                .put("fullName", "Peer employee").put("departmentId", "2").put("salaryAmount", "2000.00");
+        assertEquals(201, writeEmployee("POST", "/api/v1/employees", peerInput).statusCode());
+
+        JsonNode initialReport = assertAnalytics(get(query("q=FLOW-")), "department", 2);
+        assertEquals(JSON.readTree("""
+                [{"currencyCode":"USD","headcount":2,"totalSalary":"3000.01","averageSalary":"1500.00","minSalary":"1000.01","maxSalary":"2000.00"}]
+                """), initialReport.path("currencySummaries"));
+
+        String employeePath = "/api/v1/employees/" + created.path("id").asString();
+        ObjectNode replacement = firstInput.deepCopy().put("fullName", "Updated 社員")
+                .put("departmentId", "2").put("countryCode", "JP").put("currencyCode", "JPY")
+                .put("salaryAmount", "100000.0000").put("version", created.path("version").asString());
+        HttpResponse<String> updatedResponse = writeEmployee("PUT", employeePath, replacement);
+        assertEquals(200, updatedResponse.statusCode(), updatedResponse.body());
+        JsonNode updated = JSON.readTree(updatedResponse.body());
+        assertEquals(created.path("id"), updated.path("id"));
+        assertEquals(created.path("createdAt"), updated.path("createdAt"));
+        assertEquals("1", updated.path("version").asString());
+        assertEquals("100000", updated.path("salaryAmount").asString());
+
+        String currentFilters = "q=FLOW-&departmentId=2&countryCode=JP&currencyCode=JPY";
+        URI listing = endpoint.resolve("/api/v1/employees?page=0&size=25&" + currentFilters);
+        HttpResponse<String> listedResponse = get(listing);
+        assertEquals(200, listedResponse.statusCode(), listedResponse.body());
+        JsonNode listed = JSON.readTree(listedResponse.body());
+        assertEquals(1, listed.path("totalElements").asLong());
+        assertEquals(1, listed.path("items").size());
+        assertEquals(updated, listed.path("items").get(0));
+        JsonNode filteredReport = assertAnalytics(get(query(currentFilters)), "department", 1);
+        assertEquals("100000", filteredReport.path("currencySummaries").get(0).path("totalSalary").asString());
+
+        JsonNode departmentReport = assertAnalytics(get(query("q=FLOW-")), "department", 2);
+        assertEquals(JSON.readTree("""
+                [
+                  {"currencyCode":"JPY","headcount":1,"totalSalary":"100000","averageSalary":"100000","minSalary":"100000","maxSalary":"100000"},
+                  {"currencyCode":"USD","headcount":1,"totalSalary":"2000.00","averageSalary":"2000.00","minSalary":"2000.00","maxSalary":"2000.00"}
+                ]
+                """), departmentReport.path("currencySummaries"));
+        assertEquals(JSON.readTree("""
+                [
+                  {"groupKey":"2","groupLabel":"Finance","currencyCode":"JPY","headcount":1,"totalSalary":"100000","averageSalary":"100000","minSalary":"100000","maxSalary":"100000"},
+                  {"groupKey":"2","groupLabel":"Finance","currencyCode":"USD","headcount":1,"totalSalary":"2000.00","averageSalary":"2000.00","minSalary":"2000.00","maxSalary":"2000.00"}
+                ]
+                """), departmentReport.path("groups"));
+        JsonNode countryReport = assertAnalytics(get(query("q=FLOW-&groupBy=country")), "country", 2);
+        assertEquals(departmentReport.path("currencySummaries"), countryReport.path("currencySummaries"));
+        assertEquals(JSON.readTree("""
+                [
+                  {"groupKey":"IN","groupLabel":"India","currencyCode":"USD","headcount":1,"totalSalary":"2000.00","averageSalary":"2000.00","minSalary":"2000.00","maxSalary":"2000.00"},
+                  {"groupKey":"JP","groupLabel":"Japan","currencyCode":"JPY","headcount":1,"totalSalary":"100000","averageSalary":"100000","minSalary":"100000","maxSalary":"100000"}
+                ]
+                """), countryReport.path("groups"));
+        assertEmpty(get(query("q=FLOW-&departmentId=1&countryCode=IN&currencyCode=USD")), "department");
+
+        // Both failures cross the write/read boundary: neither may leak a partial salary into a report.
+        HttpResponse<String> stale = writeEmployee("PUT", employeePath,
+                replacement.deepCopy().put("salaryAmount", "999999"));
+        assertEquals(409, stale.statusCode(), stale.body());
+        assertEquals("STALE_EMPLOYEE", JSON.readTree(stale.body()).path("code").asString());
+        HttpResponse<String> invalid = writeEmployee("PUT", employeePath,
+                replacement.deepCopy().put("version", updated.path("version").asString())
+                        .put("salaryAmount", "100000.001"));
+        assertEquals(400, invalid.statusCode(), invalid.body());
+        assertEquals("VALIDATION_ERROR", JSON.readTree(invalid.body()).path("code").asString());
+        assertEquals(updated, JSON.readTree(get(endpoint.resolve(employeePath)).body()));
+        assertEquals(listed, JSON.readTree(get(listing).body()));
+        assertEquals(departmentReport, assertAnalytics(get(query("q=FLOW-")), "department", 2));
+        assertEquals(countryReport, assertAnalytics(get(query("q=FLOW-&groupBy=country")), "country", 2));
     }
 
     @ParameterizedTest
@@ -346,6 +426,14 @@ class CompensationAnalyticsApiIT {
     private HttpResponse<String> get(URI uri) throws Exception {
         return client.send(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10)).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> writeEmployee(String method, String path, ObjectNode input) throws Exception {
+        assertEquals(204, get(endpoint.resolve("/api/v1/auth/csrf")).statusCode());
+        HttpRequest request = HttpRequest.newBuilder(endpoint.resolve(path)).timeout(Duration.ofSeconds(10))
+                .header("Content-Type", "application/json").header("X-XSRF-TOKEN", csrfToken())
+                .method(method, HttpRequest.BodyPublishers.ofString(input.toString())).build();
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     private URI query(String parameters) {

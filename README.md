@@ -263,6 +263,8 @@ Both result levels come from the same captured group rows, including when anothe
 
 ## Verification and Testing
 
+The [Step 22 integration verification record](docs/VERIFICATION.md) contains the actual suite results and connected browser workflow, including salary changes propagating from employee forms to directory and analytics, stale-update recovery, and session expiry. The repeatable cross-endpoint regression runs in `CompensationAnalyticsApiIT` through the existing `./mvnw verify` command.
+
 The migration suite checks fresh setup, repeat migration/validation, reference data, exact decimal storage, required values, unique identifiers, invalid salaries, reference integrity, and protected lookup deletion. Each test rolls back its changes; its disposable database is separate from the persistent development database.
 
 Employee-creation unit tests cover normalization, international names, positive plain-decimal salaries, storage boundaries, currency precision, and precise conflict classification. Creation integration tests start the real Spring application against a separate disposable PostgreSQL database, check committed values through JDBC, and verify invalid requests leave no records. They also verify normalized duplicates and two concurrent same-number requests. Creation tests clear only their own disposable database between cases and close the application before stopping its container.
@@ -293,6 +295,7 @@ Flyway owns schema changes. Add new versioned migration files for changes after 
 - [API contracts](docs/API.md)
 - [Assumptions and pending clarification](docs/ASSUMPTIONS.md)
 - [AI usage: major code changes](docs/AI_USAGE.md)
+- [Local integration verification](docs/VERIFICATION.md)
 
 ## Deployment
 
