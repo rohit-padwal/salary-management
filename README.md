@@ -4,7 +4,7 @@ Employee salary management for an HR Manager overseeing 10,000 employees across 
 
 ## Current Status
 
-The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup and server-side paginated employee search with department/country/currency filters and allowlisted sorting are also available. Compensation analytics are available through an authenticated JSON endpoint. Employee seeding and the Angular UI remain planned.
+The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup and server-side paginated employee search with department/country/currency filters and allowlisted sorting are also available. Compensation analytics are available through an authenticated JSON endpoint. An explicit seed command loads 10,000 deterministic synthetic employees. The Angular UI remains planned.
 
 ## Backend Toolchain
 
@@ -66,6 +66,27 @@ docker compose ps
 ```
 
 The database binds to loopback and stores data in a named volume at the PostgreSQL 18 image's supported volume location. Existing data is preserved across container restarts. Changing `.env` does not automatically change credentials in an existing database volume.
+
+## Seed 10,000 Synthetic Employees
+
+Build the backend with `./mvnw verify` from `backend/`, start PostgreSQL, then run from the repository root on macOS/Linux:
+
+```sh
+set -a
+. ./.env
+set +a
+./scripts/seed-employees.sh
+```
+
+The script requires `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` in the environment and uses `JAVA_HOME` when set. It targets that database, applies/validates Flyway migrations, and loads exactly 10,000 employees in one transaction. It prints `Seeded 10000 synthetic employees.` on success and exits; it starts no HTTP server and needs no HR login account. Normal application startup never seeds data.
+
+The equivalent command is `java -jar backend/target/salary-management-0.0.1-SNAPSHOT.jar --seed-employees`, with Java 21 and the same environment variables. This also works from PowerShell after setting those variables. Use the seed flag alone; other command-line arguments are rejected in seed mode. Database settings stay out of command-line arguments and source control.
+
+The employee table must be empty. A rerun or any existing employee causes a nonzero exit without inserting, updating, or deleting employee records. The command does not reset the database or overwrite HR edits. To reproduce the dataset, point it at a separate empty database with the supported reference catalogs. A late insert failure rolls back the whole load; concurrent seed attempts are serialized. The load briefly blocks employee writes while ordinary reads can continue.
+
+Dataset version 1 uses fixed random seed `20261018`, `SYN-000001` through `SYN-010000`, curated international name combinations, all eight departments, and all six countries/currencies. Salary bands are illustrative gross annual amounts in each country's usual currency, not market benchmarks; the application still supports country and currency independently. Country counts are 1,667 each for IN/US/GB/DE and 1,666 each for JP/KW. Department IDs and currency precision come from current catalogs; names/codes required by the generator must exist. Shared employee and salary rules validate all records before insertion.
+
+Reproducibility covers employee numbers and business fields for the same generator/catalog metadata on Java 21. Database-generated IDs/timestamps are intentionally excluded; sequences can advance even after rolled-back inserts. Loading and listing/analytics checks at 10,000 records are functional verification, not a performance benchmark.
 
 ## Configure HR Access
 
@@ -215,7 +236,9 @@ Creation and effective updates obtain latest-change metadata from PostgreSQL's t
 
 `CompensationAnalyticsApiIT` exercises the real authenticated HTTP endpoint against isolated PostgreSQL: independently expected group/summary JSON, currency-scale strings, large IDs/totals, search/filter binding, literal and Unicode search, empty data, strict query errors, authentication before parsing, GET without CSRF, unsupported response media types, and absent write handlers.
 
-The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script and the frontend remain future work.
+`EmployeeSeedGeneratorTest` checks reproducibility, unique employee numbers, diverse valid names, catalog coverage, and currency precision. `EmployeeSeedIT` checks the complete 10,000-row load, listing/analytics compatibility, catalog metadata, rerun refusal with preserved HR edits, concurrent seed attempts, rollback after a late batch failure, repeatable business data, and the executable JAR's seed mode/exit status. These tests use only their own disposable PostgreSQL database.
+
+Flyway alone creates eight departments, six countries, six currencies, and no employees. The separate seed command populates employees explicitly. The frontend and workload performance measurement remain future work.
 
 Flyway owns schema changes. Add new versioned migration files for changes after a migration has been committed/applied; do not rewrite completed migrations. Hibernate validates the schema at startup and does not generate it. Separate `schema.sql`/`data.sql` initialization and Open Session in View are disabled.
 

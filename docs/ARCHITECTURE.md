@@ -26,12 +26,12 @@ Spring Data JPA is implemented for employee persistence and immutable reference-
 
 | Area | Owns | Boundary |
 | --- | --- | --- |
-| Employee management | Employee identity, department/country details, listing, search, and employee use cases | Coordinates employee workflows; does not duplicate compensation rules. |
+| Employee management | Employee identity, department/country details, listing, search, and employee use cases including synthetic bulk creation | Coordinates employee workflows; does not duplicate compensation rules. |
 | Reference data | Supported department, country, and currency catalogs and their read API | Migration-controlled records; employee validation and forms use the same catalogs. |
 | Compensation | Salary amount/currency validation and current compensation changes | Keeps monetary rules out of controllers and UI components. |
 | Analytics | Read-only summaries and database aggregation queries | Does not change employee or compensation records. |
 | Security | Authentication, sessions, and access enforcement | Application code must not rely on frontend guards as authorization. |
-| Infrastructure | Persistence configuration, migrations, seeding, and operational configuration | Supplies technical integration without becoming a general-purpose business module. |
+| Infrastructure | Persistence configuration, migrations, command startup, and operational configuration | Supplies technical integration without becoming a general-purpose business module. |
 
 The approved [data model](DATA_MODEL.md) uses `employees`, `departments`, `countries`, and `currencies`. Current salary fields belong to the employee record; employee management owns its entity and repository, while compensation owns salary validation/change rules. Employee application services coordinate combined changes in one transaction. Logical boundaries do not require a separate compensation table or endpoint.
 
@@ -94,6 +94,16 @@ SQL is intentionally coupled to the PostgreSQL schema. The native and JPA predic
 The application result uses typed grouping and currency-scaled `BigDecimal` values. `CompensationController` exposes authenticated `GET /api/v1/analytics/compensation`. `CompensationParameters` allowlists the five supported query names, rejects repeated values, maps exact lowercase grouping names, and reuses `PositiveId` and `EmployeeReadCriteria`. Absent grouping defaults to department; supplied invalid grouping is a field error. Pagination and sorting parameters are rejected. The small single-value reader remains local to the parser, matching the existing listing parser without introducing a generic query framework.
 
 `CompensationResponse` maps application values to dedicated HTTP records: lowercase grouping, integer counts, exact string keys, and plain currency-scale decimal strings. It performs no calculation or persistence access. This boundary allows later transport changes without changing the calculation model. Existing session authentication, cache prevention, CSRF policy, and Problem Details handling apply unchanged; reads need no CSRF token. Real HTTP/PostgreSQL tests verify the contract and access behavior. No new dependency, configuration, or schema migration is needed.
+
+## Explicit Synthetic Data Loading
+
+`scripts/seed-employees.sh` invokes the same executable JAR with `--seed-employees`. The application entry point selects a non-web context, obtains the seed service, and closes the context after completion or failure. It accepts no extra seed-mode arguments; database configuration comes from the existing environment variables. Normal startup is unchanged and never calls the seed service. No HTTP seed endpoint, startup runner, seed migration, dependency, or alternate packaging is introduced.
+
+Employee management owns `EmployeeSeedGenerator` and `EmployeeSeedService` because they form an employee bulk-creation use case and reuse package-local `EmployeeInput` validation. The generator is framework-free and fixes the record count, country order, department names, curated names, illustrative salary bands, and random seed. It resolves current department IDs/currency precision from catalogs, avoiding hardcoded migration IDs or catalog iteration order. The six-country dataset uses typical local currencies as a demo choice, not a new country/currency business restriction. Reproducibility covers business data for unchanged code/catalog metadata on Java 21, excluding server-generated IDs/timestamps.
+
+The service owns one transaction. A PostgreSQL `SHARE ROW EXCLUSIVE` lock on employees serializes seed attempts and employee writes; an empty-table check under that lock refuses every existing dataset, including previous seeds. Catalogs are read once, all 10,000 generated records pass shared employee/monetary validation before inserts, and existing JDBC support writes batches of 500. Foreign keys/constraints remain authoritative. Database defaults supply IDs, version, and timestamps. Any failure rolls back all batches, though PostgreSQL sequences may advance. There is no automatic cleanup or overwrite behavior.
+
+This explicit batch path avoids 10,000 individual service transactions/flushes and repeated catalog lookups while preserving current validation. It is coupled to the employee schema and supports only this fixed demo dataset. Holding a table lock and validating the bounded dataset in memory are acceptable for initial loading; larger or user-driven imports would need separately designed streaming, duplicate, authorization, and partial-failure policies. The seed is not a general import framework or a performance guarantee. CLI tests execute the packaged JAR against isolated PostgreSQL and verify termination, success/failure exit status, and absence of an HTTP server.
 
 ## Runtime and Deployment Structure
 

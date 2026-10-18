@@ -46,7 +46,7 @@ Use `VARCHAR(2)` for country codes and `VARCHAR(3)` for currency codes. Code-sha
 
 The initial catalog contains Engineering, Finance, HR, Sales, Marketing, Operations, Customer Support, and Legal; countries IN, US, GB, DE, JP, and KW; and currencies INR, USD, GBP, EUR, JPY, and KWD. Currency minor units were checked against the [SIX ISO 4217 maintenance data](https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml): JPY uses zero, KWD three, and the others two. These supported records are fixed in V2; extensions require new migrations.
 
-Reference records are controlled through migrations initially. The employee seed script uses those supported records to generate 10,000 synthetic employees. No reference-data administration UI is included in the MVP.
+Reference records are controlled through migrations initially. The explicit employee seed command uses those supported records to generate 10,000 synthetic employees, resolving department IDs by name and currency precision by code. It requires an empty employee table and inserts in a single transaction with shared input/money validation before JDBC batches. IDs, initial version, and timestamps use existing database defaults. Business fields are reproducible; database-generated IDs/timestamps are not. No reference-data administration UI is included in the MVP.
 
 Referenced lookup records cannot be cascade-deleted. Foreign keys prevent invalid references and removal of lookup records still in use. Employee deletion is outside the current product scope.
 
@@ -112,6 +112,8 @@ Editing tests additionally verify full replacement, metadata/version changes, cu
 `CompensationAnalyticsIT` verifies exact SQL group sums/counts/minimums/maximums for department/country, separate currencies, listing filter/search parity, large aggregate totals and string IDs, no-match data, and one grouped read returning aggregate rows rather than employee entities. A coordinated transaction updates salary after aggregation and verifies group/currency summaries still agree on the captured values. Calculation unit tests verify weighted averages and single `HALF_EVEN` rounding without reusing rounded subgroup averages. No schema or applied migration was changed for analytics.
 
 `CompensationAnalyticsApiIT` additionally verifies the read-only HTTP contract against PostgreSQL, including currency-scale strings, exact large department IDs and aggregate totals, both grouping dimensions, validated filters, empty data, and access enforcement. Adding the HTTP adapter required no schema changes.
+
+`EmployeeSeedIT` verifies exactly 10,000 employees across all catalogs, correct currency precision, default version/timestamps, working listing/analytics, safe rerun refusal, changed catalog IDs/precision, full rollback of earlier batches after a late constraint violation, and serialization of concurrent loads. It compares business fields across fresh loads while excluding generated IDs/timestamps. The executable JAR is tested in non-web seed mode. No migration was added or rewritten for seeding.
 
 ## Future Expansion
 
