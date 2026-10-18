@@ -71,4 +71,4 @@ Compare the response with this register, identify impacts, and present proposed 
 
 ## AI-Assisted Decision Record
 
-See [AI_USAGE.md](AI_USAGE.md) for the consolidated prompts, decisions, corrections, and verification record. Approval of the requirements and architecture does not authorize application implementation or later roadmap steps.
+Keep [AI_USAGE.md](AI_USAGE.md) to one brief line per major code change; omit routine documentation, tooling, and Git details. Design decisions belong in their relevant documents. Approval of one step does not authorize later roadmap steps.

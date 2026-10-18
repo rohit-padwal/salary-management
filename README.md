@@ -1,10 +1,10 @@
 # Employee Salary Management
 
-Incubyte assessment for an HR Manager maintaining employee compensation across multiple countries.
+Employee salary management for an HR Manager overseeing 10,000 employees across multiple countries, built for the Incubyte engineering assessment.
 
 ## Current Status
 
-The requirements, architecture, data model, and API contracts are documented. The backend currently contains a runnable Spring Boot foundation only. Employee workflows, analytics, authentication, PostgreSQL integration, migrations, seeding, and the Angular UI remain planned work.
+The backend foundation builds and runs. Requirements, architecture, data model, and API contracts are documented. Employee management, analytics, authentication, PostgreSQL integration, migrations, seeding, and the Angular UI are planned.
 
 ## Backend Toolchain
 
@@ -13,11 +13,11 @@ The requirements, architecture, data model, and API contracts are documented. Th
 - Maven 3.9.11, pinned by the included Maven Wrapper
 - Spring Boot's managed test starter, including JUnit Jupiter 6 and Mockito
 
-JUnit 6 was approved in place of the initial JUnit 5 preference to follow the current Spring Boot testing stack. Persistence, validation, and security dependencies will be added with their approved implementation steps.
+Persistence, validation, and security dependencies will be added with their implementation steps.
 
 ## Build
 
-Install a JDK 21 and set `JAVA_HOME` to it. The wrapper downloads its pinned Maven distribution and dependencies on first use; a global Maven installation is not required. Initial downloads require HTTPS access to Maven Central. The Unix wrapper uses available download tools or its Java fallback; the Windows wrapper uses PowerShell.
+Install JDK 21 and set `JAVA_HOME` to it. Maven Wrapper downloads Maven and project dependencies on first use, requiring HTTPS access to Maven Central. A global Maven installation is not required. The Windows wrapper uses PowerShell.
 
 On macOS, select an installed Java 21 JDK for the current shell:
 
@@ -25,7 +25,7 @@ On macOS, select an installed Java 21 JDK for the current shell:
 export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 ```
 
-On other platforms, set `JAVA_HOME` to your JDK 21 installation using your shell's normal environment configuration. This matters even if `java -version` already shows 21: Maven can otherwise run on a different installed JDK.
+On other platforms, configure `JAVA_HOME` for your JDK 21 installation. Check the Java version reported by Maven, since it can differ from `java -version`.
 
 From the repository root:
 
@@ -45,11 +45,11 @@ After building, run from `backend/`:
 "$JAVA_HOME/bin/java" -jar target/salary-management-0.0.1-SNAPSHOT.jar --server.address=127.0.0.1
 ```
 
-The server starts on `http://127.0.0.1:8080`. Stop it with Ctrl+C. No business routes are registered yet, so a request to `/api/v1/employees` currently returns `404`. No database or credentials are required for this bootstrap stage.
+The server starts at `http://127.0.0.1:8080`. Stop it with Ctrl+C. No database or credentials are required at this stage. Business routes are not implemented, so `/api/v1/employees` currently returns `404`.
 
 ## Verification and Testing
 
-`./mvnw verify` compiles and packages the application using the standard Maven lifecycle. No automated application tests exist yet; a successful build does not prove employee or security behavior. Bootstrap verification also starts the packaged JAR on loopback and checks its HTTP response. Business-rule tests will be introduced with the relevant features using Red -> Green -> Refactor.
+`./mvnw verify` compiles and packages the application. No automated application tests exist yet. The packaged JAR has also passed a local startup and HTTP 404 smoke check. Business-rule tests will be introduced with each feature using Red -> Green -> Refactor.
 
 ## Design Documents
 
@@ -58,8 +58,8 @@ The server starts on `http://127.0.0.1:8080`. Stop it with Ctrl+C. No business r
 - [Data model](docs/DATA_MODEL.md)
 - [API contracts](docs/API.md)
 - [Assumptions and pending clarification](docs/ASSUMPTIONS.md)
-- [AI collaboration and verification record](docs/AI_USAGE.md)
+- [AI usage: major code changes](docs/AI_USAGE.md)
 
 ## Deployment
 
-Deployment is not configured yet. The approved target is one Spring Boot application serving Angular assets and REST under one public origin, backed by PostgreSQL. Hosting, production access configuration, and deployed verification remain separate approved steps.
+Deployment is not configured. The planned target is one Spring Boot application serving Angular assets and REST under one public origin, backed by PostgreSQL. Hosting and production access configuration remain pending.
