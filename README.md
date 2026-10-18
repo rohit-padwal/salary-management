@@ -4,7 +4,7 @@ Employee salary management for an HR Manager overseeing 10,000 employees across 
 
 ## Current Status
 
-The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup and server-side paginated employee search with department/country/currency filters and allowlisted sorting are also available. Compensation analytics are available through an authenticated JSON endpoint. An explicit seed command loads 10,000 deterministic synthetic employees. The Angular UI remains planned.
+The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup and server-side paginated employee search with department/country/currency filters and allowlisted sorting are also available. Compensation analytics are available through an authenticated JSON endpoint. An explicit seed command loads 10,000 deterministic synthetic employees. The Angular 22.2.3 workspace is initialized with a minimal application heading, routing, strict typing, and tests. Employee, login, and analytics screens remain planned.
 
 ## Project Organization
 
@@ -23,7 +23,23 @@ Backend packages remain grouped by feature under `backend/src/main/java/com/acme
 
 ## Frontend Baseline
 
-The user has selected the latest stable modern Angular. Angular, CLI, build tooling, and Material **22.2.3** are the verified baseline on 2026-10-18, with compatible Node 24 LTS and TypeScript 6.0.x. No frontend workspace or dependencies have been created yet. See [frontend tooling and conventions](docs/FRONTEND.md) before initialization; recheck stable versions at that step and commit exact dependency resolution in the lockfile.
+The frontend in `frontend/` uses modern Angular/CLI/build tooling **22.2.3**, verified as the latest stable release on 2026-10-18, with Node **24.22.0**, npm **11.19.1**, TypeScript 6.0.x, and a committed dependency lockfile. Material/CDK remain deferred until controls need them. See [frontend setup](frontend/README.md) and [frontend conventions](docs/FRONTEND.md).
+
+With compatible Node selected, run from `frontend/`:
+
+```sh
+npm ci
+npm test
+npm run format:check
+npm run build
+npm start
+```
+
+The development server binds to `127.0.0.1:4200` and proxies `/api/**` to the backend at `127.0.0.1:8080`. Production output is `frontend/dist/salary-management-ui/browser`; packaging it with Spring Boot remains a delivery step. On this Mac, an ignored, checksum-verified Node distribution lives in `.tools/node-v24.22.0-darwin-arm64`; the frontend README explains selecting it for the current shell without changing the global Node default.
+
+## Git Exclusions
+
+The root `.gitignore` excludes Node dependencies, Angular/Maven build output, caches, coverage and browser-test reports, local tooling, IDE settings, environment files, logs, and Java runtime diagnostics. Source/configuration, `frontend/package-lock.json`, Maven Wrapper files, and Flyway migrations remain trackable. Sanitized `.env.example` templates may be committed; actual `.env` and `.env.*` files stay ignored. Installed dependency directories, local credentials, and generated output stay untracked.
 
 ## Backend Toolchain
 
@@ -257,7 +273,7 @@ Creation and effective updates obtain latest-change metadata from PostgreSQL's t
 
 `EmployeeSeedGeneratorTest` checks reproducibility, unique employee numbers, diverse valid names, catalog coverage, and currency precision. `EmployeeSeedIT` checks the complete 10,000-row load, listing/analytics compatibility, catalog metadata, rerun refusal with preserved HR edits, concurrent seed attempts, rollback after a late batch failure, repeatable business data, and the executable JAR's seed mode/exit status. These tests use only their own disposable PostgreSQL database.
 
-Flyway alone creates eight departments, six countries, six currencies, and no employees. The separate seed command populates employees explicitly. The frontend and workload performance measurement remain future work.
+Flyway alone creates eight departments, six countries, six currencies, and no employees. The separate seed command populates employees explicitly. Frontend feature screens and workload performance measurement remain future work.
 
 Flyway owns schema changes. Add new versioned migration files for changes after a migration has been committed/applied; do not rewrite completed migrations. Hibernate validates the schema at startup and does not generate it. Separate `schema.sql`/`data.sql` initialization and Open Session in View are disabled.
 

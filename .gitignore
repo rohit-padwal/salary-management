@@ -1,13 +1,47 @@
 # Maven build output
 **/target/
+*.class
+
+# Java runtime diagnostics
+*.hprof
+hs_err_pid*
+replay_pid*
+
+# Node dependencies, Angular output, and test artifacts
+**/node_modules/
+**/dist/
+**/.angular/
+**/coverage/
+**/.cache/
+**/.npm/
+**/.pnpm-store/
+**/.yarn/cache/
+**/.yarn/unplugged/
+*.tsbuildinfo
+/frontend/out-tsc/
+/frontend/tmp/
+/frontend/.sass-cache/
+/frontend/playwright-report/
+/frontend/test-results/
+
+# Downloaded local tooling; never part of the application source
+/.tools/
 
 # Local IDE settings
 .idea/
 *.iml
 .vscode/
+.settings/
+.classpath
+.project
+.history/
 
 # Local environment and runtime files
 .env
 .env.*
+!.env.example
 *.log
+*.pid
+*.pid.lock
 .DS_Store
+Thumbs.db
