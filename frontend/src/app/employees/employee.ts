@@ -25,4 +25,17 @@ export interface EmployeeListQuery {
   readonly page: number;
   readonly size: number;
   readonly q: string;
+  readonly departmentId?: string;
+  readonly countryCode?: string;
+  readonly currencyCode?: string;
+  readonly sort?: `${EmployeeSortField},${SortDirection}`;
 }
+
+export type EmployeeSortField =
+  | 'employeeNumber'
+  | 'fullName'
+  | 'departmentName'
+  | 'countryCode'
+  | 'currencyCode'
+  | 'salaryAmount';
+export type SortDirection = 'asc' | 'desc';

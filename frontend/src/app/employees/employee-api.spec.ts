@@ -56,4 +56,43 @@ describe('EmployeeApi', () => {
     expect(error).toHaveBeenCalledOnce();
     http.expectNone((req) => req.url === '/api/v1/employees');
   });
+
+  it('combines independent catalog filters with search, paging, and an exact server sort', () => {
+    api
+      .list({
+        page: 2,
+        size: 50,
+        q: 'A+B',
+        departmentId: '9007199254740993',
+        countryCode: 'IN',
+        currencyCode: 'USD',
+        sort: 'salaryAmount,desc',
+      })
+      .subscribe();
+    const request = http.expectOne((req) => req.url === '/api/v1/employees');
+    expect(request.request.params.keys().sort()).toEqual([
+      'countryCode',
+      'currencyCode',
+      'departmentId',
+      'page',
+      'q',
+      'size',
+      'sort',
+    ]);
+    expect(request.request.params.get('departmentId')).toBe('9007199254740993');
+    expect(request.request.params.get('countryCode')).toBe('IN');
+    expect(request.request.params.get('currencyCode')).toBe('USD');
+    expect(request.request.params.getAll('sort')).toEqual(['salaryAmount,desc']);
+    expect(request.request.params.get('q')).toBe('A+B');
+    request.flush({ items: [], page: 2, size: 50, totalElements: 0, totalPages: 0 });
+  });
+
+  it('omits blank filters without inferring a currency from the selected country', () => {
+    api
+      .list({ page: 0, size: 25, q: '', departmentId: '', countryCode: 'IN', currencyCode: '' })
+      .subscribe();
+    const request = http.expectOne((req) => req.url === '/api/v1/employees');
+    expect(request.request.params.keys().sort()).toEqual(['countryCode', 'page', 'size']);
+    request.flush({ items: [], page: 0, size: 25, totalElements: 0, totalPages: 0 });
+  });
 });

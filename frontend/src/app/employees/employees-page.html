@@ -9,8 +9,8 @@
     <h2 id="directory-heading">Employee directory</h2>
     <p>Gross annual base salary, shown in each employee’s recorded currency.</p>
   </div>
-  <form class="search-form" [formGroup]="form" (ngSubmit)="submitSearch()">
-    <mat-form-field appearance="outline" class="search-field">
+  <form class="query-form" [formGroup]="form" (ngSubmit)="applyQuery()">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search-field">
       <mat-label>Search employees</mat-label>
       <input matInput name="q" formControlName="q" type="search" autocomplete="off" />
       <mat-hint>Search by name or employee number. Up to 200 characters.</mat-hint>
@@ -21,9 +21,78 @@
         <mat-error>Search cannot contain a null character.</mat-error>
       }
     </mat-form-field>
-    <div class="search-actions">
-      <button matButton="filled" type="submit">Search</button>
-      <button matButton type="button" (click)="clearSearch()">Clear search</button>
+    @let lookup = catalogState();
+    @if (lookup.kind === 'loading') {
+      <p class="lookup-message" role="status">Loading filter options…</p>
+    } @else if (lookup.kind === 'error') {
+      <div class="lookup-error">
+        <p role="alert">{{ lookup.message }}</p>
+        <button matButton="tonal" type="button" (click)="retryCatalogs()">Retry filters</button>
+      </div>
+    }
+    <fieldset class="catalog-filters" [disabled]="lookup.kind !== 'loaded'">
+      <legend class="visually-hidden">Employee filters</legend>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Department</mat-label>
+        <select matNativeControl name="departmentId" formControlName="departmentId">
+          <option value="">All departments</option>
+          @for (department of catalogs()?.departments ?? []; track department.id) {
+            <option [value]="department.id">{{ department.name }}</option>
+          }
+        </select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Country</mat-label>
+        <select matNativeControl name="countryCode" formControlName="countryCode">
+          <option value="">All countries</option>
+          @for (country of catalogs()?.countries ?? []; track country.code) {
+            <option [value]="country.code">{{ country.name }} ({{ country.code }})</option>
+          }
+        </select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Currency</mat-label>
+        <select matNativeControl name="currencyCode" formControlName="currencyCode">
+          <option value="">All currencies</option>
+          @for (currency of catalogs()?.currencies ?? []; track currency.code) {
+            <option [value]="currency.code">{{ currency.code }} — {{ currency.name }}</option>
+          }
+        </select>
+        <mat-hint>Independent of employment country.</mat-hint>
+      </mat-form-field>
+    </fieldset>
+    <div class="sort-controls">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Sort by</mat-label>
+        <select
+          matNativeControl
+          name="sortField"
+          formControlName="sortField"
+          aria-describedby="salary-sort-help"
+          [attr.aria-invalid]="form.hasError('currencyRequired')"
+        >
+          @for (field of sortFields; track field.value) {
+            <option [value]="field.value">{{ field.label }}</option>
+          }
+        </select>
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Direction</mat-label>
+        <select matNativeControl name="sortDirection" formControlName="sortDirection">
+          <option value="asc">Ascending</option>
+          <option value="desc">Descending</option>
+        </select>
+      </mat-form-field>
+    </div>
+    <p class="query-help" id="salary-sort-help">
+      Salary sorting requires a currency filter. Choose Apply to update the directory.
+    </p>
+    @if (form.hasError('currencyRequired')) {
+      <p class="query-error" role="alert">Select a currency before sorting by salary.</p>
+    }
+    <div class="query-actions">
+      <button matButton="filled" type="submit">Apply</button>
+      <button matButton type="button" (click)="resetQuery()">Reset</button>
     </div>
   </form>
 
@@ -41,7 +110,7 @@
         @case ('loaded') {
           @if (page(); as result) {
             <p role="status">
-              {{ result.totalElements }} {{ query().q ? 'matching ' : ''
+              {{ result.totalElements }} {{ hasCriteria() ? 'matching ' : ''
               }}{{ result.totalElements === 1 ? 'employee' : 'employees' }}
             </p>
             @if (!result.items.length) {
@@ -51,9 +120,9 @@
                 <button matButton="tonal" type="button" (click)="firstPage()">
                   Go to first page
                 </button>
-              } @else if (query().q) {
+              } @else if (hasCriteria()) {
                 <h3>No matching employees</h3>
-                <p>Try another name or employee number, or clear your search.</p>
+                <p>Change your search or filters, or reset the directory.</p>
               } @else {
                 <h3>No employees yet</h3>
                 <p>The employee directory is currently empty.</p>

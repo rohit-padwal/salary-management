@@ -6,6 +6,7 @@ import { signal } from '@angular/core';
 import { of } from 'rxjs';
 import { SessionService } from './auth/session-service';
 import { EmployeeApi } from './employees/employee-api';
+import { ReferenceDataApi } from './reference-data/reference-data-api';
 
 describe('Application navigation', () => {
   let fixture: ComponentFixture<App>;
@@ -25,6 +26,10 @@ describe('Application navigation', () => {
           useValue: {
             list: () => of({ items: [], page: 0, size: 25, totalElements: 0, totalPages: 0 }),
           },
+        },
+        {
+          provide: ReferenceDataApi,
+          useValue: { get: () => of({ departments: [], countries: [], currencies: [] }) },
         },
       ],
     }).compileComponents();

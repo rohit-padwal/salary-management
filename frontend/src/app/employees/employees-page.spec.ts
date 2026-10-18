@@ -35,6 +35,10 @@ describe('Employee directory', () => {
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(EmployeesPage);
     fixture.detectChanges();
+    http
+      .expectOne('/api/v1/reference-data')
+      .flush({ departments: [], countries: [], currencies: [] });
+    fixture.detectChanges();
   });
   afterEach(() => {
     fixture.destroy();
@@ -185,7 +189,7 @@ describe('Employee directory', () => {
     await fixture.whenStable();
     const button = Array.from(
       fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
-    ).find((b) => b.textContent?.trim() === 'Clear search')!;
+    ).find((b) => b.textContent?.trim() === 'Reset')!;
     button.click();
     await fixture.whenStable();
     request().flush({ items: [employee], page: 0, size: 25, totalElements: 70, totalPages: 3 });
@@ -260,7 +264,7 @@ describe('Employee directory', () => {
     [401, 'Your session has ended. Please sign in again.'],
     [403, 'You do not have permission to view employees.'],
     [0, 'Cannot reach the server. Check your connection and try again.'],
-    [400, 'The search could not be accepted. Review it and try again.'],
+    [400, 'The query could not be accepted. Review the search, filters, and sort, then try again.'],
   ])('uses a safe message for status %s', async (status, message) => {
     const pending = request();
     if (status === 0) pending.error(new ProgressEvent('error'));
