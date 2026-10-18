@@ -1,6 +1,6 @@
 # API Contracts and Business Rules
 
-**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`), retrieval/editing (`GET`/`PUT /api/v1/employees/{id}`), and authentication/session/CSRF endpoints are implemented and tested. Employee listing, analytics, and reference-data HTTP endpoints remain unimplemented; their paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
+**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`), retrieval/editing (`GET`/`PUT /api/v1/employees/{id}`), reference-data lookup (`GET /api/v1/reference-data`), and authentication/session/CSRF endpoints are implemented and tested. Employee listing and analytics endpoints remain unimplemented; their paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
 
 ## Conventions
 
@@ -25,7 +25,7 @@ Use JSON REST endpoints under `/api/v1`, with explicit request/response DTOs. Pa
 
 There is no employee deletion, partial-update, or separate salary-update endpoint in the MVP. `PUT` updates an existing employee; a missing employee returns `404` rather than creating a record.
 
-Creation, retrieval, and full editing by ID are currently implemented in this table. The creation `Location` can be followed to retrieve the record. Until listing exists, an authenticated `GET /api/v1/employees` returns `405` with an `Allow` header.
+Creation, retrieval, full editing by ID, and reference-data lookup are currently implemented in this table. The creation `Location` can be followed to retrieve the record. Until listing exists, an authenticated `GET /api/v1/employees` returns `405` with an `Allow` header.
 
 Retrieval requires authentication but no CSRF header. Parse path IDs with the same positive-`Long` helper used for creation's department ID: ASCII digits only, no signs/whitespace/decimal points/exponents, and no overflow. Leading zeros are accepted. Invalid values return `400 VALIDATION_ERROR` with field `id`; a valid missing ID returns `404 EMPLOYEE_NOT_FOUND`. Authentication is checked before parsing/lookup. A successful read returns the same response representation without changing salary, version, or timestamps.
 
@@ -105,11 +105,15 @@ Offset pagination is appropriate for the current dataset. A unique sort tie-brea
 
 ## Reference-Data Contract
 
-Return one object containing:
+The implemented authenticated `GET /api/v1/reference-data` returns `200 application/json` with one object containing:
 
 - `departments`: records with `id` (string) and `name`.
 - `countries`: records with `code` and `name`.
 - `currencies`: records with `code`, `name`, and integer `minorUnits`.
+
+Order departments by name ascending, then ID ascending; order countries and currencies by code ascending. Name ordering follows the database collation. Empty catalogs are empty arrays, never null or a missing property. Department IDs are exact strings, including values beyond JavaScript's safe integer range; minor units are JSON integers. GET requires a session but no CSRF cookie/header. Unauthenticated requests return `401 AUTHENTICATION_REQUIRED` without catalog data or an HTML redirect.
+
+The read-only query service fetches current database values through existing repositories; it does not hardcode catalogs or cache responses. Responses retain the existing security `no-store` headers. No new dependencies or schema changes are needed. POST/PUT/DELETE have no handlers and return `405` after authentication/CSRF checks.
 
 These are the supported catalogs used by forms, filters, and validation. They are controlled through migrations; no write endpoints are included. The implemented catalogs and display-name limits are documented in [DATA_MODEL.md](DATA_MODEL.md). A supported country does not restrict an employee to one inferred currency.
 
@@ -204,6 +208,7 @@ Implemented tests cover:
 - Plain decimal-string handling, meaningful excess precision, trailing zeros, storage limits, and exact monetary round trips.
 - Atomic updates, original-version stale forms, unchanged submissions, and races detected by optimistic locking/unique constraints, including commit-time verification.
 - Unauthenticated reads, generic login failure, session timeout, CSRF issuance/refresh, login/logout, and consistent security error bodies.
+- Complete ordered reference catalogs, exact string IDs/integer minor units, current database values, empty catalogs, read access without CSRF, and absence of catalog write handlers.
 
 Search/filter/paging/sorting tests and independently calculated analytics with separate currencies, empty results, and `HALF_EVEN` rounding remain planned. Their contracts do not imply those features are implemented.
 

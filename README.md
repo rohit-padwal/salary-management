@@ -4,7 +4,7 @@ Employee salary management for an HR Manager overseeing 10,000 employees across 
 
 ## Current Status
 
-The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Listing, reference-data/analytics endpoints, employee seeding, and the Angular UI remain planned.
+The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation, retrieval, and full editing are available through JSON APIs, with stale-update protection, session authentication, and Angular-compatible CSRF protection. Authenticated reference-data lookup is also available. Listing, analytics endpoints, employee seeding, and the Angular UI remain planned.
 
 ## Backend Toolchain
 
@@ -114,6 +114,16 @@ Missing/invalid CSRF tokens return `403`, including for login/logout. Unsupporte
 
 Stop the application with Ctrl+C. Stop the development database with `docker compose stop db`; its named volume is retained.
 
+## Retrieve Supported Reference Data
+
+Send authenticated `GET /api/v1/reference-data` before populating employee forms or filters. No CSRF cookie/header is required for this read. The `200` JSON response contains:
+
+- `departments`: string `id` and `name`, ordered by name then ID.
+- `countries`: `code` and `name`, ordered by code.
+- `currencies`: `code`, `name`, and integer `minorUnits`, ordered by code.
+
+The values come from the supported database catalogs used by employee validation. An empty catalog is an empty array. Department IDs remain exact strings even beyond JavaScript's safe integer range. Countries and currencies are independent choices; selecting a country does not imply a currency. Missing authentication returns `401` without a login redirect. Catalogs are managed through migrations; no write endpoints or caching are added.
+
 ## Create an Employee
 
 After login and CSRF refresh, send `POST /api/v1/employees` with `Content-Type: application/json`, the session/CSRF cookies, and the `X-XSRF-TOKEN` header:
@@ -129,7 +139,7 @@ After login and CSRF refresh, send `POST /api/v1/employees` with `Content-Type: 
 }
 ```
 
-The example department must exist in your database. Success returns `201`, a normalized employee response, and `Location: /api/v1/employees/{id}`. IDs/versions and salaries are JSON strings; timestamps are UTC strings. Salary is formatted to its currency's minor units. The response contains the six editable fields plus ID, version, timestamps, department name, and country name. Follow the returned `Location` to retrieve the record.
+Choose a supported department ID from `/api/v1/reference-data`; the example department must exist in your database. Success returns `201`, a normalized employee response, and `Location: /api/v1/employees/{id}`. IDs/versions and salaries are JSON strings; timestamps are UTC strings. Salary is formatted to its currency's minor units. The response contains the six editable fields plus ID, version, timestamps, department name, and country name. Follow the returned `Location` to retrieve the record.
 
 All six fields are required strings. Unknown/server-managed fields and non-string values are rejected. Invalid input/reference values return `400`; duplicate normalized numbers return `409 EMPLOYEE_NUMBER_CONFLICT`; unsupported request content types return `415`. Errors use Problem Details without rejected values or database details. Failed validation does not write an employee. Concurrent duplicate requests result in one creation and one conflict.
 
@@ -171,7 +181,9 @@ Security unit tests reject missing/plaintext/malformed account configuration and
 
 Creation and effective updates obtain latest-change metadata from PostgreSQL's transaction clock. JPA manages the version; the client-supplied version is only a precondition. Unchanged submissions perform no employee write. Tests use disposable databases and do not reset development data.
 
-The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Listing, reference-data/analytics endpoints, and the frontend remain future work.
+`ReferenceDataApiIT` verifies the real HTTP response against PostgreSQL: complete ordered catalogs, exact JSON types, large string IDs, Unicode names, current database metadata, empty catalogs, authentication, GET without CSRF, unsupported media types, and rejection of catalog writes. It resets only its own disposable database between cases.
+
+The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Listing, analytics endpoints, and the frontend remain future work.
 
 Flyway owns schema changes. Add new versioned migration files for changes after a migration has been committed/applied; do not rewrite completed migrations. Hibernate validates the schema at startup and does not generate it. Separate `schema.sql`/`data.sql` initialization and Open Session in View are disabled.
 

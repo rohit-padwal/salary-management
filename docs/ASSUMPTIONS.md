@@ -61,7 +61,9 @@ Employee retrieval by ID is implemented through an authenticated GET with no CSR
 
 Full editing is implemented at `PUT /api/v1/employees/{id}`, requiring six editable string fields and the original nonnegative integer-string version. The service checks the original version and uses optimistic locking through commit. Effective changes advance server-managed version/update time; unchanged normalized submissions preserve metadata but can still conflict with a concurrent writer. Missing targets return `404`, stale edits `409 STALE_EMPLOYEE`, and duplicate numbers a separate `409`. Validation/conflict failures roll back the replacement. No automatic retry or upsert is performed. These behaviors were approved for this step; frontend form preservation/reload remains future UI work.
 
-Employee listing and reference-data/analytics HTTP endpoints remain approved contracts awaiting implementation. Listing/analytics queries and production runtime verification remain later steps.
+Authenticated `GET /api/v1/reference-data` is implemented with string department IDs and integer currency minor units. The response reads current supported catalogs in database order: department name/ID and country/currency code. Empty catalogs return empty arrays. The existing security policy requires a session but no CSRF token for GET. Catalog administration, caching, and pagination are excluded for these small migration-controlled tables; future live administration would need explicit consistency rules.
+
+Employee listing and analytics HTTP endpoints remain approved contracts awaiting implementation. Listing/analytics queries and production runtime verification remain later steps.
 
 ## Questions Awaiting Resolution
 
