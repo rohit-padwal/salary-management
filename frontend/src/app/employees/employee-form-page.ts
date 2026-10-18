@@ -16,8 +16,18 @@ import { FormBuilder, ReactiveFormsModule, ValidatorFn, Validators } from '@angu
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { Router, RouterLink } from '@angular/router';
-import { finalize } from 'rxjs';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import {
+  catchError,
+  defer,
+  EMPTY,
+  finalize,
+  Observable,
+  startWith,
+  Subject,
+  switchMap,
+  takeUntil,
+} from 'rxjs';
 import { ReferenceData } from '../reference-data/reference-data';
 import { ReferenceDataApi } from '../reference-data/reference-data-api';
 import { Employee } from './employee';
@@ -38,16 +48,19 @@ function textValidator(check: (value: string) => string | null): ValidatorFn {
 }
 
 @Component({
-  selector: 'app-employee-create-page',
+  selector: 'app-employee-form-page',
   imports: [ReactiveFormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, RouterLink],
-  templateUrl: './employee-create-page.html',
-  styleUrl: './employee-create-page.css',
+  templateUrl: './employee-form-page.html',
+  styleUrl: './employee-form-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class EmployeeCreatePage {
+export class EmployeeFormPage {
   private readonly api = inject(EmployeeApi);
   private readonly referenceData = inject(ReferenceDataApi);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly reloadEmployee = new Subject<void>();
+  private readonly routeChanged = new Subject<void>();
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly confirmation = viewChild<ElementRef<HTMLHeadingElement>>('confirmation');
@@ -56,7 +69,14 @@ export class EmployeeCreatePage {
   protected readonly saving = signal(false);
   protected readonly optionsError = signal<string | null>(null);
   protected readonly saveError = signal<string | null>(null);
-  protected readonly created = signal<Employee | null>(null);
+  protected readonly saved = signal<Employee | null>(null);
+  protected readonly employeeId = signal<string | null>(null);
+  protected readonly editing = computed(() => this.employeeId() !== null);
+  protected readonly original = signal<Employee | null>(null);
+  protected readonly employeeLoading = signal(false);
+  protected readonly employeeError = signal<string | null>(null);
+  protected readonly employeeRetry = signal(false);
+  protected readonly reloadRequired = signal(false);
   protected readonly optionsReady = computed(() => {
     const options = this.catalogs();
     return !!(options?.departments.length && options.countries.length && options.currencies.length);
@@ -84,6 +104,84 @@ export class EmployeeCreatePage {
       this.form.controls.salaryAmount.updateValueAndValidity();
     });
     this.loadOptions();
+    this.route.paramMap
+      .pipe(
+        switchMap((params) => {
+          this.routeChanged.next();
+          this.employeeId.set(params.get('id'));
+          this.original.set(null);
+          this.saved.set(null);
+          this.employeeError.set(null);
+          this.reloadRequired.set(false);
+          this.saveError.set(null);
+          this.form.reset();
+          return this.reloadEmployee.pipe(
+            startWith(undefined),
+            switchMap(() => this.readEmployee()),
+          );
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((employee) => {
+        // Only a successful explicit read may replace a draft and its original version.
+        this.original.set(employee);
+        const { employeeNumber, fullName, departmentId, countryCode, salaryAmount, currencyCode } =
+          employee;
+        this.form.reset({
+          employeeNumber,
+          fullName,
+          departmentId,
+          countryCode,
+          salaryAmount,
+          currencyCode,
+        });
+        this.reloadRequired.set(false);
+        this.saveError.set(null);
+      });
+  }
+
+  protected loadEmployee(): void {
+    if (!this.employeeLoading() && !this.saving()) this.reloadEmployee.next();
+  }
+
+  private readEmployee(): Observable<Employee> {
+    const id = this.employeeId();
+    if (id === null) return EMPTY;
+    // Bound the path to the API's positive Long range without rounding through Number.
+    const significantDigits = id.replace(/^0+/, '');
+    if (
+      !/^[0-9]+$/.test(id) ||
+      significantDigits.length > 19 ||
+      BigInt(id) < 1n ||
+      BigInt(id) > 9223372036854775807n
+    ) {
+      this.employeeError.set('Employee ID is invalid.');
+      this.employeeRetry.set(false);
+      return EMPTY;
+    }
+    return defer(() => {
+      this.employeeLoading.set(true);
+      this.employeeError.set(null);
+      return this.api.get(id);
+    }).pipe(
+      catchError((error: unknown) => {
+        const status = error instanceof HttpErrorResponse ? error.status : 0;
+        this.employeeRetry.set(status === 0 || status >= 500);
+        this.employeeError.set(
+          status === 404
+            ? 'Employee was not found.'
+            : status === 401
+              ? 'Your session has ended. Please sign in again.'
+              : status === 403
+                ? 'You do not have permission to view this employee.'
+                : status === 400
+                  ? 'Employee ID is invalid.'
+                  : 'Employee could not be loaded. Your current entries have not been replaced.',
+        );
+        return EMPTY;
+      }),
+      finalize(() => this.employeeLoading.set(false)),
+    );
   }
 
   protected loadOptions(): void {
@@ -119,20 +217,33 @@ export class EmployeeCreatePage {
   }
 
   protected submit(): void {
-    if (this.loading() || this.saving() || this.created() || !this.optionsReady()) return;
+    if (
+      this.loading() ||
+      this.employeeLoading() ||
+      this.saving() ||
+      this.saved() ||
+      this.reloadRequired() ||
+      !this.optionsReady() ||
+      (this.editing() && !this.original())
+    )
+      return;
     this.saveError.set(null);
     this.form.markAllAsTouched();
     if (this.form.invalid) return;
     this.saving.set(true);
-    this.api
-      .create(this.form.getRawValue())
+    const original = this.original();
+    const request = original
+      ? this.api.update(original.id, { ...this.form.getRawValue(), version: original.version })
+      : this.api.create(this.form.getRawValue());
+    request
       .pipe(
+        takeUntil(this.routeChanged),
         takeUntilDestroyed(this.destroyRef),
         finalize(() => this.saving.set(false)),
       )
       .subscribe({
         next: (employee) => {
-          this.created.set(employee);
+          this.saved.set(employee);
           afterNextRender(() => this.confirmation()?.nativeElement.focus(), {
             injector: this.injector,
           });
@@ -142,11 +253,31 @@ export class EmployeeCreatePage {
   }
 
   protected cancel(): void {
-    if (!this.saving()) void this.router.navigate(['/employees']);
+    if (!this.saving() && !this.employeeLoading()) void this.router.navigate(['/employees']);
   }
 
   private handleSaveError(error: unknown): void {
     if (error instanceof HttpErrorResponse) {
+      if (
+        this.editing() &&
+        error.status === 409 &&
+        error.error?.code !== 'EMPLOYEE_NUMBER_CONFLICT'
+      ) {
+        this.reloadRequired.set(true);
+        this.saveError.set(
+          error.error?.code === 'STALE_EMPLOYEE'
+            ? 'Another update changed this employee. Your draft is preserved. Discard it and load the latest employee before editing again.'
+            : 'The update conflicted with the current employee. Your draft is preserved. Discard it and load the latest employee before editing again.',
+        );
+        return;
+      }
+      if (this.editing() && error.status === 404) {
+        this.reloadRequired.set(true);
+        this.saveError.set(
+          'Employee was not found. Your draft is preserved; it has not been saved.',
+        );
+        return;
+      }
       if (error.status === 409 && error.error?.code === 'EMPLOYEE_NUMBER_CONFLICT') {
         this.form.controls.employeeNumber.setErrors({
           server: 'Employee number is already in use.',
@@ -163,7 +294,7 @@ export class EmployeeCreatePage {
         this.saveError.set(
           error.error?.code === 'CSRF_INVALID'
             ? 'The security token was rejected. Your entries are preserved. Save again to refresh it.'
-            : 'You do not have permission to add employees.',
+            : `You do not have permission to ${this.editing() ? 'edit' : 'add'} employees.`,
         );
         return;
       }
@@ -172,7 +303,14 @@ export class EmployeeCreatePage {
         return;
       }
     }
-    // A lost response does not prove the write failed. Never replay a create automatically.
+    // A lost response does not prove the write failed. Never replay a mutation automatically.
+    if (this.editing()) {
+      this.reloadRequired.set(true);
+      this.saveError.set(
+        'Save could not be confirmed. Your draft is preserved. Discard it and load the latest employee to check the saved values before editing again.',
+      );
+      return;
+    }
     this.saveError.set(
       'Save could not be confirmed. Check the directory for this employee number before trying again.',
     );

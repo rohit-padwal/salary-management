@@ -25,6 +25,17 @@ describe('Application navigation', () => {
           provide: EmployeeApi,
           useValue: {
             list: () => of({ items: [], page: 0, size: 25, totalElements: 0, totalPages: 0 }),
+            get: (id: string) =>
+              of({
+                id,
+                employeeNumber: 'EMP-1',
+                fullName: 'Asha',
+                departmentId: '1',
+                countryCode: 'IN',
+                salaryAmount: '1.00',
+                currencyCode: 'USD',
+                version: '0',
+              }),
           },
         },
         {
@@ -138,5 +149,18 @@ describe('Application navigation', () => {
     await fixture.whenStable();
     expect(router.url).toBe('/employees');
     expect(page.querySelector('main h1')?.textContent?.trim()).toBe('Employees');
+  });
+
+  it('opens a protected edit deep link with an active Employees section and supports Cancel', async () => {
+    const page = await navigate('/employees/9007199254740993/edit');
+    expect(page.querySelector('main h1')?.textContent).toBe('Edit employee');
+    expect(page.querySelector<HTMLInputElement>('[name="fullName"]')?.value).toBe('Asha');
+    expect(document.title).toBe('Edit employee | Salary Management');
+    expect(page.querySelector('nav a[aria-current="page"]')?.textContent?.trim()).toBe('Employees');
+    Array.from(page.querySelectorAll('button'))
+      .find((button) => button.textContent?.trim() === 'Cancel')!
+      .click();
+    await fixture.whenStable();
+    expect(router.url).toBe('/employees');
   });
 });

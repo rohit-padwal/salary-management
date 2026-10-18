@@ -1,11 +1,46 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable, switchMap } from 'rxjs';
-import { CreateEmployeeInput, Employee, EmployeeListQuery, EmployeePage } from './employee';
+import {
+  CreateEmployeeInput,
+  Employee,
+  EmployeeListQuery,
+  EmployeePage,
+  UpdateEmployeeInput,
+} from './employee';
 
 @Injectable({ providedIn: 'root' })
 export class EmployeeApi {
   private readonly http = inject(HttpClient);
+
+  get(id: string): Observable<Employee> {
+    return this.http.get<Employee>(`/api/v1/employees/${encodeURIComponent(id)}`);
+  }
+
+  update(id: string, input: UpdateEmployeeInput): Observable<Employee> {
+    const {
+      employeeNumber,
+      fullName,
+      departmentId,
+      countryCode,
+      salaryAmount,
+      currencyCode,
+      version,
+    } = input;
+    return this.http.get<void>('/api/v1/auth/csrf').pipe(
+      switchMap(() =>
+        this.http.put<Employee>(`/api/v1/employees/${encodeURIComponent(id)}`, {
+          employeeNumber,
+          fullName,
+          departmentId,
+          countryCode,
+          salaryAmount,
+          currencyCode,
+          version,
+        }),
+      ),
+    );
+  }
 
   create(input: CreateEmployeeInput): Observable<Employee> {
     const { employeeNumber, fullName, departmentId, countryCode, salaryAmount, currencyCode } =

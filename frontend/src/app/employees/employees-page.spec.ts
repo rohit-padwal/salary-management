@@ -93,6 +93,12 @@ describe('Employee directory', () => {
       expect(page.textContent).toContain(text);
     expect(page.querySelectorAll('tbody tr')).toHaveLength(1);
     expect(page.querySelector('caption')?.textContent).toContain('gross annual base');
+    expect(page.querySelector<HTMLAnchorElement>('a.employee-name')?.getAttribute('href')).toBe(
+      '/employees/9007199254740993/edit',
+    );
+    expect(page.querySelector('a.employee-name')?.getAttribute('aria-label')).toBe(
+      'Edit Asha Rao (EMP-000001)',
+    );
     expect(page.querySelector('[aria-busy="false"]')).not.toBeNull();
   });
 

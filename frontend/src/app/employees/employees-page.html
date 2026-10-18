@@ -146,7 +146,11 @@
         <ng-container matColumnDef="employee">
           <th mat-header-cell *matHeaderCellDef scope="col">Employee</th>
           <td mat-cell *matCellDef="let employee">
-            <span class="employee-name">{{ employee.fullName }}</span
+            <a
+              class="employee-name"
+              [routerLink]="['/employees', employee.id, 'edit']"
+              [attr.aria-label]="'Edit ' + employee.fullName + ' (' + employee.employeeNumber + ')'"
+              >{{ employee.fullName }}</a
             ><span class="secondary">{{ employee.employeeNumber }}</span>
           </td>
         </ng-container>

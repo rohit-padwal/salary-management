@@ -2,10 +2,10 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { EmployeeCreatePage } from './employee-create-page';
+import { EmployeeFormPage } from './employee-form-page';
 
 describe('Employee creation', () => {
-  let fixture: ComponentFixture<EmployeeCreatePage>;
+  let fixture: ComponentFixture<EmployeeFormPage>;
   let http: HttpTestingController;
   const catalogs = {
     departments: [{ id: '9007199254740993', name: 'Engineering' }],
@@ -26,11 +26,11 @@ describe('Employee creation', () => {
   };
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [EmployeeCreatePage],
+      imports: [EmployeeFormPage],
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
     http = TestBed.inject(HttpTestingController);
-    fixture = TestBed.createComponent(EmployeeCreatePage);
+    fixture = TestBed.createComponent(EmployeeFormPage);
     fixture.detectChanges();
   });
   afterEach(() => {

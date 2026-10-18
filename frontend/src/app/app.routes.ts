@@ -18,7 +18,13 @@ export const routes: Routes = [
         path: 'employees/new',
         title: 'Add employee | Salary Management',
         loadComponent: () =>
-          import('./employees/employee-create-page').then((page) => page.EmployeeCreatePage),
+          import('./employees/employee-form-page').then((page) => page.EmployeeFormPage),
+      },
+      {
+        path: 'employees/:id/edit',
+        title: 'Edit employee | Salary Management',
+        loadComponent: () =>
+          import('./employees/employee-form-page').then((page) => page.EmployeeFormPage),
       },
       {
         path: 'employees',

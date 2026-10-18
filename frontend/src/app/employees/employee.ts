@@ -26,6 +26,8 @@ export type CreateEmployeeInput = Pick<
   'employeeNumber' | 'fullName' | 'departmentId' | 'countryCode' | 'salaryAmount' | 'currencyCode'
 >;
 
+export type UpdateEmployeeInput = CreateEmployeeInput & Pick<Employee, 'version'>;
+
 export interface EmployeeListQuery {
   readonly page: number;
   readonly size: number;

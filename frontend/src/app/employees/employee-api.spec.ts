@@ -18,6 +18,72 @@ describe('EmployeeApi', () => {
     document.cookie = 'XSRF-TOKEN=; Max-Age=0; path=/';
   });
 
+  it('gets an exact string ID without requiring CSRF', () => {
+    const observed = vi.fn();
+    api.get('9007199254740993').subscribe(observed);
+    const request = http.expectOne('/api/v1/employees/9007199254740993');
+    expect(request.request.method).toBe('GET');
+    request.flush({ id: '9007199254740993', version: '9007199254740995' });
+    expect(observed).toHaveBeenCalledWith({ id: '9007199254740993', version: '9007199254740995' });
+    http.expectNone('/api/v1/auth/csrf');
+  });
+
+  it('refreshes CSRF and puts exactly seven string fields, retaining the original version and amount', () => {
+    const input = {
+      employeeNumber: 'emp-1',
+      fullName: ' 李  明 ',
+      departmentId: '9007199254740993',
+      countryCode: 'IN',
+      salaryAmount: '999999999999999.9900',
+      currencyCode: 'USD',
+      version: '9007199254740995',
+      id: '7',
+      updatedAt: 'not editable',
+    };
+    api.update('9007199254740997', input).subscribe();
+    http.expectNone('/api/v1/employees/9007199254740997');
+    document.cookie = 'XSRF-TOKEN=update-token; path=/';
+    http.expectOne('/api/v1/auth/csrf').flush(null);
+    const request = http.expectOne('/api/v1/employees/9007199254740997');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.headers.get('X-XSRF-TOKEN')).toBe('update-token');
+    expect(request.request.body).toEqual({
+      employeeNumber: input.employeeNumber,
+      fullName: input.fullName,
+      departmentId: input.departmentId,
+      countryCode: 'IN',
+      salaryAmount: input.salaryAmount,
+      currencyCode: 'USD',
+      version: input.version,
+    });
+    request.flush({ ...input, version: '9007199254740996' });
+  });
+
+  it('does not PUT after a failed CSRF read and never retries stale or unconfirmed updates', () => {
+    const input = {
+      employeeNumber: 'EMP-1',
+      fullName: 'Asha',
+      departmentId: '1',
+      countryCode: 'IN',
+      salaryAmount: '1.00',
+      currencyCode: 'USD',
+      version: '3',
+    };
+    const error = vi.fn();
+    api.update('1', input).subscribe({ error });
+    http.expectOne('/api/v1/auth/csrf').error(new ProgressEvent('error'));
+    http.expectNone('/api/v1/employees/1');
+    for (const status of [409, 0]) {
+      api.update('1', input).subscribe({ error });
+      http.expectOne('/api/v1/auth/csrf').flush(null);
+      const request = http.expectOne('/api/v1/employees/1');
+      if (status) request.flush({ code: 'STALE_EMPLOYEE' }, { status, statusText: 'Conflict' });
+      else request.error(new ProgressEvent('error'));
+      http.expectNone('/api/v1/employees/1');
+    }
+    expect(error).toHaveBeenCalledTimes(3);
+  });
+
   it('obtains CSRF before posting exactly six editable string fields without altering amounts', () => {
     const input = {
       employeeNumber: 'emp-1',

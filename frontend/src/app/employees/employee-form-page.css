@@ -49,6 +49,11 @@ a[matButton] {
 .form-alert a {
   color: inherit;
 }
+.form-alert button {
+  margin: 0 0.75rem 0.75rem 0;
+  max-width: 100%;
+  height: auto;
+}
 .visually-hidden {
   position: absolute;
   width: 1px;

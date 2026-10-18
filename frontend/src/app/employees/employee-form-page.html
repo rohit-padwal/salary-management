@@ -1,14 +1,20 @@
 <div class="page-heading">
   <p class="eyebrow">Employee management</p>
-  <h1>Add employee</h1>
+  <h1>{{ editing() ? 'Edit employee' : 'Add employee' }}</h1>
   <p class="page-description">
-    Create an employee record and their current gross annual base salary.
+    {{
+      editing()
+        ? 'Update employee details and their current gross annual base salary.'
+        : 'Create an employee record and their current gross annual base salary.'
+    }}
   </p>
 </div>
 
-@if (created(); as employee) {
+@if (saved(); as employee) {
   <section class="employee-card confirmation" aria-labelledby="confirmation-heading">
-    <h2 #confirmation id="confirmation-heading" tabindex="-1">Employee added</h2>
+    <h2 #confirmation id="confirmation-heading" tabindex="-1">
+      {{ editing() ? 'Employee updated' : 'Employee added' }}
+    </h2>
     <p role="status">The employee and current salary have been saved.</p>
     <dl>
       <div>
@@ -34,6 +40,19 @@
     </dl>
     <a matButton="filled" routerLink="/employees">Back to employees</a>
   </section>
+} @else if (editing() && !original()) {
+  <section class="employee-card" aria-label="Employee loading">
+    @if (employeeLoading()) {
+      <p role="status">Loading employee…</p>
+    }
+    @if (employeeError(); as message) {
+      <p role="alert">{{ message }}</p>
+      @if (employeeRetry()) {
+        <button matButton="tonal" type="button" (click)="loadEmployee()">Retry employee</button>
+      }
+    }
+    <a matButton routerLink="/employees">Back to employees</a>
+  </section>
 } @else {
   <section class="employee-card" aria-labelledby="employee-form-heading">
     <h2 id="employee-form-heading">Employee details</h2>
@@ -54,11 +73,35 @@
     @if (saveError(); as message) {
       <div class="form-alert">
         <p role="alert">{{ message }}</p>
+        @if (reloadRequired()) {
+          <p>
+            Loading the latest employee will discard all entries in this draft. No changes are
+            merged automatically.
+          </p>
+          <button
+            matButton="tonal"
+            type="button"
+            (click)="loadEmployee()"
+            [disabled]="employeeLoading()"
+          >
+            Discard draft and load latest
+          </button>
+        }
         <a routerLink="/employees">Check employee directory</a>
       </div>
     }
+    @if (employeeLoading()) {
+      <p role="status">Loading latest employee…</p>
+    }
+    @if (employeeError(); as message) {
+      <p role="alert">{{ message }}</p>
+    }
     <form [formGroup]="form" (ngSubmit)="submit()">
-      <fieldset [disabled]="loading() || saving() || !optionsReady()">
+      <fieldset
+        [disabled]="
+          loading() || employeeLoading() || saving() || reloadRequired() || !optionsReady()
+        "
+      >
         <legend class="visually-hidden">Employee and compensation information</legend>
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Employee number</mat-label>
@@ -148,11 +191,20 @@
         <button
           matButton="filled"
           type="submit"
-          [disabled]="loading() || saving() || !optionsReady()"
+          [disabled]="
+            loading() || employeeLoading() || saving() || reloadRequired() || !optionsReady()
+          "
         >
-          Save employee
+          {{ editing() ? 'Save changes' : 'Save employee' }}
         </button>
-        <button matButton type="button" (click)="cancel()" [disabled]="saving()">Cancel</button>
+        <button
+          matButton
+          type="button"
+          (click)="cancel()"
+          [disabled]="saving() || employeeLoading()"
+        >
+          Cancel
+        </button>
       </div>
       @if (saving()) {
         <p role="status">Saving employee…</p>

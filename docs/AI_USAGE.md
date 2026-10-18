@@ -6,3 +6,4 @@ AI-assisted Angular bootstrap: strict standalone setup, reproducible tooling, an
 AI-assisted frontend authentication: cookie sessions, CSRF rotation, protected navigation, and login/logout verification.
 AI-assisted employee directory: server paging/search, exact salary display, and cancellation/error handling.
 AI-assisted employee creation UI: exact salary validation, CSRF-protected saves, safe field errors, and server-confirmed results.
+AI-assisted employee editing UI: shared form, original-version updates, explicit stale-draft recovery, and browser verification.
