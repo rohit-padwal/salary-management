@@ -4,7 +4,7 @@ import com.acme.salarymanagement.validation.InputValidationException;
 import com.acme.salarymanagement.validation.ReferenceCode;
 
 public record EmployeePageRequest(int page, int size, String q,
-        Long departmentId, String countryCode, String currencyCode) {
+        Long departmentId, String countryCode, String currencyCode, EmployeeSort sort) {
 
     public EmployeePageRequest(int page, int size) {
         this(page, size, null);
@@ -12,6 +12,10 @@ public record EmployeePageRequest(int page, int size, String q,
 
     public EmployeePageRequest(int page, int size, String q) {
         this(page, size, q, null, null, null);
+    }
+
+    public EmployeePageRequest(int page, int size, String q, Long departmentId, String countryCode, String currencyCode) {
+        this(page, size, q, departmentId, countryCode, currencyCode, EmployeeSort.DEFAULT);
     }
 
     public EmployeePageRequest {
@@ -30,6 +34,10 @@ public record EmployeePageRequest(int page, int size, String q,
         }
         if (currencyCode != null) {
             currencyCode = ReferenceCode.normalize(currencyCode, "currencyCode", 3);
+        }
+        sort = sort == null ? EmployeeSort.DEFAULT : sort;
+        if (sort.field() == EmployeeSort.Field.SALARY_AMOUNT && currencyCode == null) {
+            throw new InputValidationException("sort", "CURRENCY_REQUIRED", "Select a currency before sorting by salary.");
         }
     }
 

@@ -4,6 +4,7 @@ import com.acme.salarymanagement.validation.InputValidationException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -92,5 +93,30 @@ class EmployeePageRequestTest {
                         field.equals("countryCode") ? value : null, field.equals("currencyCode") ? value : null));
         assertEquals(field, failure.field());
         assertEquals("INVALID_FORMAT", failure.code());
+    }
+
+    @Test
+    void defaultsToEmployeeNumberAscendingForAbsentSort() {
+        assertEquals(EmployeeSort.DEFAULT, new EmployeePageRequest(0, 25).sort());
+        assertEquals(EmployeeSort.DEFAULT, new EmployeePageRequest(0, 25, null, null, null, null, null).sort());
+    }
+
+    @ParameterizedTest
+    @EnumSource(EmployeeSort.Direction.class)
+    void salarySortRequiresAnExplicitCurrencyForNonHttpCallers(EmployeeSort.Direction direction) {
+        EmployeeSort sort = new EmployeeSort(EmployeeSort.Field.SALARY_AMOUNT, direction);
+        InputValidationException failure = assertThrows(InputValidationException.class,
+                () -> new EmployeePageRequest(0, 25, null, null, "IN", null, sort));
+        assertEquals("sort", failure.field());
+        assertEquals("CURRENCY_REQUIRED", failure.code());
+        EmployeePageRequest accepted = new EmployeePageRequest(0, 25, null, null, "IN", " usd ", sort);
+        assertEquals("USD", accepted.currencyCode());
+        assertEquals(sort, accepted.sort());
+    }
+
+    @Test
+    void typedSortRequiresBothFieldAndDirection() {
+        assertThrows(InputValidationException.class, () -> new EmployeeSort(null, EmployeeSort.Direction.ASC));
+        assertThrows(InputValidationException.class, () -> new EmployeeSort(EmployeeSort.Field.FULL_NAME, null));
     }
 }

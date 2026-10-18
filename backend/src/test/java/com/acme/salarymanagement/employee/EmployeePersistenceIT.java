@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -309,6 +310,39 @@ class EmployeePersistenceIT {
             }
             assertEquals(expectedStatements, statistics.getPrepareStatementCount());
             assertEquals(expectedItems, statistics.getEntityStatistics(Employee.class.getName()).getLoadCount());
+            assertEquals(0, statistics.getEntityInsertCount());
+            assertEquals(0, statistics.getEntityUpdateCount());
+            assertEquals(0, statistics.getEntityDeleteCount());
+        } finally {
+            statistics.setStatisticsEnabled(originallyEnabled);
+        }
+        assertEquals(before, jdbc.queryForList("SELECT * FROM employees ORDER BY id"));
+    }
+
+    @ParameterizedTest
+    @EnumSource(EmployeeSort.Field.class)
+    void everySortKeepsContentReadsBoundedAndFetchesLabelsWithoutPerRowQueries(EmployeeSort.Field field) {
+        for (int number = 4; number > 0; number--) {
+            service.create(command("EMP-%02d".formatted(number), "Match Person " + number, Integer.toString(number), "USD"));
+        }
+        var before = jdbc.queryForList("SELECT * FROM employees ORDER BY id");
+        var statistics = context.getBean(EntityManagerFactory.class).unwrap(SessionFactory.class).getStatistics();
+        boolean originallyEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+        try {
+            String currency = field == EmployeeSort.Field.SALARY_AMOUNT ? "USD" : null;
+            EmployeePageResult result = context.getBean(EmployeeQueryService.class).list(new EmployeePageRequest(
+                    0, 2, "match", null, null, currency, new EmployeeSort(field, EmployeeSort.Direction.ASC)));
+            assertEquals(4, result.totalElements());
+            assertEquals(2, result.totalPages());
+            assertEquals(2, result.items().size());
+            for (EmployeeResult item : result.items()) {
+                assertEquals("Engineering", item.departmentName());
+                assertEquals("India", item.countryName());
+            }
+            assertEquals(currency == null ? 2 : 3, statistics.getPrepareStatementCount());
+            assertEquals(2, statistics.getEntityStatistics(Employee.class.getName()).getLoadCount());
             assertEquals(0, statistics.getEntityInsertCount());
             assertEquals(0, statistics.getEntityUpdateCount());
             assertEquals(0, statistics.getEntityDeleteCount());

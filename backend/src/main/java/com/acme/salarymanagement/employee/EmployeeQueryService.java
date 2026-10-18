@@ -46,13 +46,26 @@ public class EmployeeQueryService {
         // Skip empty pages before asking JPA to represent an unnecessarily large offset.
         List<EmployeeResult> items = List.of();
         if (offset < total) {
-            PageRequest page = PageRequest.of(request.page(), request.size(), Sort.by("employeeNumber", "id"));
+            PageRequest page = PageRequest.of(request.page(), request.size(), ordering(request.sort()));
             List<Employee> matches = hasCriteria
                     ? employees.findMatching(pattern, request.departmentId(), request.countryCode(), request.currencyCode(), page)
                     : employees.findAllBy(page);
             items = matches.stream().map(Employee::toResult).toList();
         }
         return new EmployeePageResult(items, request.page(), request.size(), total, totalPages);
+    }
+
+    private static Sort ordering(EmployeeSort sort) {
+        String property = switch (sort.field()) {
+            case EMPLOYEE_NUMBER -> "employeeNumber";
+            case FULL_NAME -> "fullName";
+            case DEPARTMENT_NAME -> "department.name";
+            case COUNTRY_CODE -> "country.code";
+            case CURRENCY_CODE -> "currency.code";
+            case SALARY_AMOUNT -> "salaryAmount";
+        };
+        Sort.Direction direction = sort.direction() == EmployeeSort.Direction.ASC ? Sort.Direction.ASC : Sort.Direction.DESC;
+        return Sort.by(direction, property).and(Sort.by("id"));
     }
 
     private void validateFilters(EmployeePageRequest request) {

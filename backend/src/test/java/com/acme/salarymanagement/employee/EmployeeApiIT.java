@@ -390,7 +390,7 @@ class EmployeeApiIT {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"sort=employeeNumber,desc", "unexpected=private-value", "Page=1"})
+    @ValueSource(strings = {"unexpected=private-value", "Page=1"})
     void rejectsUnsupportedParametersInsteadOfSilentlyIgnoringThem(String query) throws Exception {
         HttpResponse<String> response = get(URI.create(endpoint + "?" + query));
         JsonNode problem = assertProblem(response, 400, "VALIDATION_ERROR");
@@ -413,6 +413,7 @@ class EmployeeApiIT {
         assertPage(get(endpoint), 0, 25, 0, 0);
         assertPage(get(searchUri("name")), 0, 25, 0, 0);
         assertPage(get(URI.create(endpoint + "?countryCode=IN")), 0, 25, 0, 0);
+        assertPage(get(sortUri("fullName,desc")), 0, 25, 0, 0);
     }
 
     @Test
@@ -617,6 +618,117 @@ class EmployeeApiIT {
         cookies.getCookieStore().removeAll();
         assertProblem(get(URI.create(endpoint + "?departmentId=-1")), 401, "AUTHENTICATION_REQUIRED");
         assertProblem(get(URI.create(endpoint + "?countryCode=ZZ")), 401, "AUTHENTICATION_REQUIRED");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "employeeNumber,asc,EMP-A|EMP-B|EMP-C|EMP-D",
+            "employeeNumber,desc,EMP-D|EMP-C|EMP-B|EMP-A",
+            "fullName,asc,EMP-D|EMP-C|EMP-B|EMP-A",
+            "fullName,desc,EMP-A|EMP-C|EMP-B|EMP-D",
+            "departmentName,asc,EMP-C|EMP-D|EMP-A|EMP-B",
+            "departmentName,desc,EMP-A|EMP-B|EMP-C|EMP-D",
+            "countryCode,asc,EMP-A|EMP-D|EMP-C|EMP-B",
+            "countryCode,desc,EMP-C|EMP-B|EMP-A|EMP-D",
+            "currencyCode,asc,EMP-A|EMP-B|EMP-C|EMP-D",
+            "currencyCode,desc,EMP-C|EMP-D|EMP-A|EMP-B",
+            "salaryAmount,asc,EMP-D|EMP-C",
+            "salaryAmount,desc,EMP-C|EMP-D"})
+    void sortsEveryAllowedFieldInBothDirectionsForPlainAndSearchedPages(
+            String field, String direction, String expectedNumbers) throws Exception {
+        insertSortEmployees();
+        var before = jdbc.queryForList("SELECT * FROM employees ORDER BY id");
+        String query = "sort=" + field + "," + direction + (field.equals("salaryAmount") ? "&currencyCode=USD" : "");
+        String[] expected = expectedNumbers.split("\\|");
+        assertFilteredNumbers(query, expected);
+        assertFilteredNumbers(query + "&q=emp-", expected);
+        assertEquals(before, jdbc.queryForList("SELECT * FROM employees ORDER BY id"));
+    }
+
+    @Test
+    void sortTiesAlwaysUseIdAscendingAcrossPagesEvenForDescendingPrimarySort() throws Exception {
+        for (String number : List.of("EMP-D", "EMP-A", "EMP-C", "EMP-B")) {
+            insertSearchEmployee(number, "Same Name");
+        }
+        List<String> listed = new java.util.ArrayList<>();
+        for (int page = 0; page < 2; page++) {
+            JsonNode result = assertPage(get(URI.create(sortUri("fullName,desc") + "&page=" + page + "&size=2")), page, 2, 4, 2);
+            result.path("items").valueStream().map(item -> item.path("employeeNumber").asString()).forEach(listed::add);
+        }
+        assertEquals(List.of("EMP-D", "EMP-A", "EMP-C", "EMP-B"), listed);
+        assertEquals(0, assertPage(get(URI.create(sortUri("fullName,desc") + "&page=2&size=2")), 2, 2, 4, 2).path("items").size());
+        assertEquals(0, assertPage(get(URI.create(sortUri("fullName,desc") + "&page=2147483647&size=2")),
+                Integer.MAX_VALUE, 2, 4, 2).path("items").size());
+    }
+
+    @Test
+    void sortingPreservesCombinedFiltersSearchAndMatchingTotals() throws Exception {
+        insertFilterEmployees();
+        String filters = "q=match&countryCode=IN&currencyCode=USD";
+        assertFilteredNumbers(filters + "&sort=employeeNumber,desc", "MATCH-007", "EMP-006");
+        assertFilteredNumbers(filters + "&sort=salaryAmount,asc", "MATCH-007", "EMP-006");
+        assertFilteredNumbers(filters + "&departmentId=" + departmentId + "&sort=fullName,desc", "MATCH-007");
+        assertFilteredNumbers("q=no-matches&countryCode=IN&currencyCode=USD&sort=salaryAmount,asc");
+    }
+
+    @Test
+    void salarySortingRequiresACurrencyEvenWithoutEmployeesOrSearchMatches() throws Exception {
+        assertFilterError(get(sortUri("salaryAmount,asc")), "sort", "CURRENCY_REQUIRED");
+        assertFilterError(get(URI.create(sortUri("salaryAmount,desc") + "&countryCode=IN")), "sort", "CURRENCY_REQUIRED");
+        insertSortEmployees();
+        assertFilterError(get(URI.create(sortUri("salaryAmount,asc") + "&q=no-matches")), "sort", "CURRENCY_REQUIRED");
+    }
+
+    @Test
+    void salarySortingChecksTheProvidedCurrencyAndUsesItsNumericAmounts() throws Exception {
+        assertFilterError(get(URI.create(sortUri("salaryAmount,asc") + "&currencyCode=ZZZ")), "currencyCode", "UNKNOWN_REFERENCE");
+        assertFilterError(get(URI.create(sortUri("salaryAmount,asc") + "&currencyCode=")), "currencyCode", "REQUIRED");
+        insertSortEmployees();
+        assertFilteredNumbers("sort=salaryAmount,asc&currencyCode=%20inr%20", "EMP-B", "EMP-A");
+        assertFilteredNumbers("sort=salaryAmount,desc&currencyCode=INR", "EMP-A", "EMP-B");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "fullName", ",asc", "fullName,", "fullName,asc,desc", "fullName,ASC",
+            "fullName,up", "FullName,asc", " fullName,asc", "fullName, asc", "fullName,asc ",
+            "id,asc", "department.name,asc", "lower(fullName),asc", "private-value,asc"})
+    void rejectsMalformedAndNonAllowlistedSortValuesWithoutEchoingThem(String value) throws Exception {
+        HttpResponse<String> response = get(sortUri(value));
+        assertFilterError(response, "sort", "INVALID_FORMAT");
+        assertFalse(response.body().contains("private-value"));
+        assertEquals(0L, countEmployees());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"sort=fullName,asc&sort=fullName,desc", "sort=fullName,asc&sort=fullName,asc"})
+    void rejectsRepeatedSortParameters(String query) throws Exception {
+        assertFilterError(get(URI.create(endpoint + "?" + query)), "sort", "SINGLE_VALUE_REQUIRED");
+    }
+
+    @Test
+    void authenticatesBeforeSortParsingOrCurrencyRequirements() throws Exception {
+        cookies.getCookieStore().removeAll();
+        assertProblem(get(sortUri("private-value,asc")), 401, "AUTHENTICATION_REQUIRED");
+        assertProblem(get(sortUri("salaryAmount,asc")), 401, "AUTHENTICATION_REQUIRED");
+    }
+
+    private URI sortUri(String value) {
+        return URI.create(endpoint + "?sort=" + URLEncoder.encode(value, StandardCharsets.UTF_8));
+    }
+
+    private void insertSortEmployees() {
+        long support = jdbc.queryForObject("SELECT id FROM departments WHERE name = 'Customer Support'", Long.class);
+        insertSortEmployee("EMP-C", "Bravo", support, "US", "USD", "10.00");
+        insertSortEmployee("EMP-A", "Charlie", departmentId, "IN", "INR", "100.00");
+        insertSortEmployee("EMP-D", "Alpha", support, "IN", "USD", "2.00");
+        insertSortEmployee("EMP-B", "Bravo", departmentId, "US", "INR", "20.00");
+    }
+
+    private void insertSortEmployee(String number, String name, long department, String country, String currency, String amount) {
+        jdbc.update("""
+                INSERT INTO employees (employee_number, full_name, department_id, country_code, salary_amount, currency_code)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, number, name, department, country, new java.math.BigDecimal(amount), currency);
     }
 
     private void insertFilterEmployees() {
