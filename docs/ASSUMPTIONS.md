@@ -31,13 +31,15 @@ Spring Security is approved for single-account session login/logout, protected r
 
 The approved backend bootstrap uses Java 21, Spring Boot 4.1.1, Spring MVC, Maven Wrapper 3.9.11, and Boot's managed JUnit Jupiter 6/Mockito test starter. JUnit 6 replaces the original JUnit 5 preference with user approval. Explicitly select Java 21 through `JAVA_HOME` because the local global Maven otherwise uses Java 25. No global tooling or shell-profile changes are needed.
 
-The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. PostgreSQL JDBC/Flyway integration is implemented. JPA, application validation, and security dependencies are deferred to their approved steps. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
+The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. PostgreSQL JDBC/Flyway integration, Spring Data JPA, and framework-free employee-creation validation are implemented. Hibernate validates the schema; Open Session in View is disabled. Jakarta Bean Validation and security dependencies remain deferred to HTTP/access-control steps. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
 
 ## Approved Data Model Decisions
 
 The user approved [DATA_MODEL.md](DATA_MODEL.md): four tables (`employees`, `departments`, `countries`, `currencies`), current salary on the employee record, controlled lookup data, required foreign keys, and no cascading lookup deletion. Department names are required, at most 100 characters, and unique without regard to case. Country and currency codes are uppercase ISO-shaped keys whose actual values require verified reference records.
 
 Employee management owns the employee entity/repository; compensation owns monetary rules; employee application services coordinate combined updates atomically; analytics owns read-only projections. One employee version supports optimistic locking; the API requires the original browser-edit version in each full update and reports stale edits as `409`.
+
+The approved first employee feature creates validated records through an application service, without an HTTP entry point. It uses read-only reference mappings, validates currency precision before persistence, and relies on the unique constraint for race-safe employee-number conflicts. Names are limited by Unicode code points, matching PostgreSQL character counting; null characters are rejected because PostgreSQL text cannot store them. Typed application values are distinct from the future HTTP string contract. Database-sourced Hibernate timestamp mappings are accepted; editing/stale-form behavior is still pending.
 
 Start with primary-key/uniqueness indexes and employee indexes on `(department_id, id)` and `(country_code, id)`. Finalize other indexes against query contracts and measurements. Do not assume B-tree indexes accelerate arbitrary name substring searches. Use a unique ID as the final sort tie-breaker.
 

@@ -1,6 +1,6 @@
 # API Contracts and Business Rules
 
-**Status:** Approved MVP project contract, subject to Incubyte clarification. The runnable backend bootstrap exists, but the employee, analytics, reference-data, and authentication endpoints described here are not implemented or behaviorally tested.
+**Status:** Approved MVP project contract, subject to Incubyte clarification. The employee-creation application service/persistence is implemented and tested. The employee, analytics, reference-data, and authentication HTTP endpoints described here are not implemented or behaviorally tested. Typed service command/result records are internal application values, not HTTP DTOs.
 
 ## Conventions
 
@@ -101,7 +101,7 @@ Return one object containing:
 - `countries`: records with `code` and `name`.
 - `currencies`: records with `code`, `name`, and integer `minorUnits`.
 
-These are the supported catalogs used by forms, filters, and validation. They are controlled through migrations; no write endpoints are included. Exact catalog records and reference display-name lengths remain to be finalized before migrations/seeding. A supported country does not restrict an employee to one inferred currency.
+These are the supported catalogs used by forms, filters, and validation. They are controlled through migrations; no write endpoints are included. The implemented catalogs and display-name limits are documented in [DATA_MODEL.md](DATA_MODEL.md). A supported country does not restrict an employee to one inferred currency.
 
 ## Compensation Analytics
 

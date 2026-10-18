@@ -1,6 +1,6 @@
 # Architecture and Engineering Decisions
 
-**Status:** Approved project design for the MVP. Incubyte's clarification remains pending; this is not a statement of additional assessment requirements. The backend and PostgreSQL/Flyway foundations are implemented; business APIs, security, and UI remain planned.
+**Status:** Approved project design for the MVP. Incubyte's clarification remains pending; this is not a statement of additional assessment requirements. The backend, PostgreSQL/Flyway foundations, and validated employee-creation service/persistence are implemented; HTTP APIs, security, and UI remain planned.
 
 ## Context and Goals
 
@@ -20,7 +20,7 @@ The backend bootstrap uses Java 21, Spring Boot 4.1.1, Spring MVC, and Maven Wra
 
 PostgreSQL 18.6 runs locally through Docker Compose with loopback access and a persistent project volume. The backend uses the Boot Flyway starter, PostgreSQL-specific Flyway module, and JDBC driver. Testcontainers supplies isolated PostgreSQL databases for integration tests, run by Maven Failsafe during `verify`. Credentials are external to Git; application startup requires configured PostgreSQL and successful migrations.
 
-Spring Data JPA, Jakarta Bean Validation, and Spring Security remain approved architecture choices to add with their implementation steps. Modern Angular, TypeScript, Angular Material, Reactive Forms, and HttpClient remain the frontend direction; version selection and Angular acceptance are still pending. The [README](../README.md) documents Java selection, build, database setup, and local execution.
+Spring Data JPA is implemented for employee persistence and immutable reference-data mappings. Jakarta Bean Validation and Spring Security remain approved choices to add with the HTTP and access-control steps. Modern Angular, TypeScript, Angular Material, Reactive Forms, and HttpClient remain the frontend direction; version selection and Angular acceptance are still pending. The [README](../README.md) documents Java selection, build, database setup, and local execution.
 
 ## Responsibilities and Boundaries
 
@@ -39,6 +39,10 @@ Analytics may query employees and their reference tables through dedicated read 
 Within a feature, controllers translate HTTP requests and responses, application services coordinate use cases and transactions, and repositories perform persistence. DTOs define API input/output; do not serialize persistence entities as public contracts. Start with manual mapping for small DTOs. Do not add mapper libraries, service interfaces, or factories without a concrete need.
 
 Keep monetary calculations and validation independently testable. Spring and JPA integration can remain pragmatic; this design does not require a second framework-free entity model or repository abstraction for every operation.
+
+`EmployeeCreationService` implements the first use case. It normalizes and validates input, resolves controlled reference records, invokes framework-free `SalaryRules`, and saves the employee in one transaction. The repository flushes inside the service so the exact employee-number unique constraint can be translated into a business conflict, including concurrent requests. Other integrity failures retain their original classification. No existence pre-check is required for correctness.
+
+Reference repositories expose lookup only; their JPA mappings are immutable and have no public mutation methods. Employee/result mapping is small and manual. The application command/result use `Long`, `BigDecimal`, and `Instant`; future HTTP DTOs must explicitly implement the approved string serialization and input-parsing rules rather than expose these records or entities directly. Salary rules and structured field errors can be reused for editing without implementing that workflow now.
 
 The Angular UI should follow the same feature responsibilities, with typed API services, reactive forms, and clear loading, empty, and error states. Share components when reuse exists. UI validation improves feedback; backend validation remains authoritative. The approved [API contract](API.md) uses `/api/v1`, decimal strings for money, integer strings for IDs/versions, application-owned page responses, and Problem Details errors.
 
@@ -76,9 +80,9 @@ A shared configured account provides no individual attribution. In-memory sessio
 
 Use Java `BigDecimal` and PostgreSQL `NUMERIC(19,4)` for positive gross annual base salary with explicit ISO currency codes. Validate currency-specific precision before persistence, because PostgreSQL can round excess scale. Reject non-finite values explicitly. Preserve currencies and separate monetary aggregation by currency. Do not infer currency from employment country or introduce conversion rates.
 
-Paginate and aggregate in PostgreSQL rather than loading the entire dataset into the application or browser. Initial tables, constraints, indexes, and reference data are implemented in two versioned Flyway migrations. Flyway is the sole schema initializer; basic SQL initialization is disabled and Flyway clean is disabled. When JPA entities are added, use schema validation rather than automatic schema mutation. Applied migrations evolve through new versions.
+Paginate and aggregate in PostgreSQL rather than loading the entire dataset into the application or browser. Initial tables, constraints, indexes, and reference data are implemented in two versioned Flyway migrations. Flyway is the sole schema initializer; basic SQL initialization is disabled and Flyway clean is disabled. Hibernate validates the schema without mutating it. Open Session in View is disabled; the creation service maps its result within its transaction. Applied migrations evolve through new versions.
 
-Application services define transaction boundaries for use cases. The employee record has one JPA optimistic-lock version; full updates must carry/check the version originally edited by the client, returning `409` on a stale edit. Required fields, foreign keys, unique employee numbers, case-insensitive department uniqueness, and initial filter indexes are specified in [DATA_MODEL.md](DATA_MODEL.md). The [API contract](API.md) defines validation, conflict responses, decimal-string money, and minor-unit `HALF_EVEN` average rounding. Each analytics response uses a consistent database snapshot. Executable implementation remains a later approved step.
+Application services define transaction boundaries for use cases. The employee mapping has one JPA optimistic-lock version. Hibernate generates creation/latest-change timestamps from the database clock, avoiding dependence on the application machine's clock; this accepts a small Hibernate-specific mapping dependency. Full updates must carry/check the version originally edited by the client, returning `409` on a stale edit. Required fields, foreign keys, unique employee numbers, case-insensitive department uniqueness, and initial filter indexes are specified in [DATA_MODEL.md](DATA_MODEL.md). The [API contract](API.md) defines validation, conflict responses, decimal-string money, and minor-unit `HALF_EVEN` average rounding. Editing, HTTP error mapping, and consistent-snapshot analytics remain later steps; the presence of `@Version` does not prove the stale-form workflow is implemented.
 
 ## Verification Strategy
 
@@ -89,7 +93,7 @@ Application services define transaction boundaries for use cases. The employee r
 - Test important Angular forms, listing/filtering interactions, and loading/error states; verify the integrated UI/API workflow.
 - Measure the realistic 10,000-record workload before making performance claims. Performance targets and integration-test environment setup remain open.
 
-Migration/reference-data/constraint checks are implemented in `FlywayMigrationIT` against disposable PostgreSQL 18.6 databases. Employee use-case, API, analytics, security, and frontend checks remain planned. Unit tests use the normal Maven test phase; database integration tests run during `verify` and require Docker.
+Migration/reference-data/constraint checks are implemented in `FlywayMigrationIT` against disposable PostgreSQL 18.6 databases. Employee-creation checks cover committed exact values, metadata, international names, invalid input/references, normalized duplicates, and concurrent same-number creation in a real Spring application context. Unit tests cover pure input/money rules and classification of integrity failures. API, editing, analytics, security, and frontend checks remain planned. Unit tests use the normal Maven test phase; database integration tests run during `verify` and require Docker.
 
 ## Future Expansion
 
@@ -110,3 +114,5 @@ Clear boundaries make changes easier to locate; they do not guarantee future fea
 - [Spring Security session management](https://docs.spring.io/spring-security/reference/servlet/authentication/session-management.html)
 - [Spring Security CSRF and SPA integration](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html)
 - [Angular security and HttpClient CSRF integration](https://angular.dev/best-practices/security)
+- [Hibernate database-sourced creation timestamps](https://docs.hibernate.org/orm/current/javadocs/org/hibernate/annotations/CreationTimestamp.html)
+- [Hibernate update timestamps](https://docs.hibernate.org/orm/current/javadocs/org/hibernate/annotations/UpdateTimestamp.html)

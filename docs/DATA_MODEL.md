@@ -1,6 +1,6 @@
 # Employee Salary Data Model
 
-**Status:** Approved project design for the MVP, subject to Incubyte clarification. The schema and initial reference records are implemented in Flyway migrations and verified against PostgreSQL 18.6. JPA entity classes and employee business behavior remain future steps.
+**Status:** Approved project design for the MVP, subject to Incubyte clarification. The schema/reference records, JPA mappings, and validated employee-creation service are implemented and verified against PostgreSQL 18.6. Editing, listing, analytics, and HTTP endpoints remain future steps.
 
 ## Context and Scope
 
@@ -32,7 +32,7 @@ erDiagram
 
 Database constraints must enforce required values, uniqueness, valid references, nonblank names, and positive finite salary amounts. Application validation provides understandable errors before persistence; database constraints remain the final protection against invalid structural state.
 
-Creation/latest-change timestamps provide operational metadata, not salary history, an audit log, or individual attribution. Both timestamps default to the transaction timestamp on insert; future application updates must maintain `updated_at`. Version defaults to zero and cannot be negative. The API will return ISO 8601 UTC timestamp strings when employee endpoints are implemented.
+Creation/latest-change timestamps provide operational metadata, not salary history, an audit log, or individual attribution. Both timestamps default to the transaction timestamp on direct SQL insert. JPA maps `Instant` timestamps with database-sourced Hibernate creation/update generators and manages the version with `@Version`; creation tests verify persisted timestamps and initial version zero. The update workflow remains unimplemented. The API will return ISO 8601 UTC timestamp strings when employee endpoints are implemented.
 
 ## Reference Data
 
@@ -103,7 +103,9 @@ Analytics remains database-side aggregation. Do not add materialized summaries, 
 
 The initial migration test was run before the SQL existed and failed because zero migrations were found. The implemented schema/reference migrations then passed the full integration suite. PostgreSQL reports `23001` for `ON DELETE RESTRICT`; the delete-protection assertions use that documented state, while invalid references use `23503`.
 
-Currency-specific input precision rejection, atomic employee use cases, stale browser edits, pagination, and analytics remain application-feature tests for later steps. The schema tests do not imply those business workflows are implemented.
+`EmployeeCreationIT` boots the application against its own disposable database, verifying Flyway/JPA compatibility, committed creation, currency-specific precision before persistence, exact salary round trips, server metadata, international names, unknown references, invalid requests leaving no records, and sequential/concurrent duplicate conflicts. Unit tests cover input normalization, Unicode character limits, salary rules, and classification of integrity failures. No applied migration was changed to add JPA.
+
+Stale browser edits, pagination, analytics, and HTTP behavior remain application-feature tests for later steps. Creation coverage does not imply those workflows are implemented.
 
 ## Future Expansion
 

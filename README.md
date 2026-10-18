@@ -4,7 +4,7 @@ Employee salary management for an HR Manager overseeing 10,000 employees across 
 
 ## Current Status
 
-The backend connects to PostgreSQL and applies its schema/reference data through Flyway. Migration integration tests run against an isolated PostgreSQL container. Employee management, analytics, authentication, employee seeding, and the Angular UI remain planned.
+The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. A transactional employee-creation service validates identity, reference data, and currency-specific salary precision, then persists the employee. Unit and isolated PostgreSQL integration tests cover this behavior. HTTP endpoints, editing/listing, analytics, authentication, employee seeding, and the Angular UI remain planned.
 
 ## Backend Toolchain
 
@@ -13,10 +13,11 @@ The backend connects to PostgreSQL and applies its schema/reference data through
 - Maven 3.9.11, pinned by the included Maven Wrapper
 - PostgreSQL 18.6, supplied locally through Docker Compose
 - Flyway for versioned migrations
+- Spring Data JPA for persistence, with Hibernate schema validation
 - Spring Boot's managed test starter, including JUnit Jupiter 6 and Mockito
 - Testcontainers for isolated PostgreSQL integration tests
 
-JPA entities/repositories, application validation, and security dependencies will be added with their implementation steps.
+Business validation currently uses independently testable Java rules. Jakarta Bean Validation and Spring Security dependencies will accompany the HTTP and access-control steps.
 
 ## Build
 
@@ -40,7 +41,7 @@ cd backend
 
 Confirm that the wrapper reports Maven 3.9.11 and Java 21. On Windows, use `mvnw.cmd` instead of `./mvnw`.
 
-`./mvnw test` runs the unit-test phase; no unit tests exist yet. `./mvnw verify` also runs the database integration tests through Maven Failsafe. Those tests require Docker but do not require the development database or its credentials.
+`./mvnw test` runs fast validation and service error-classification tests without Docker. `./mvnw verify` also runs the database integration tests through Maven Failsafe. Those tests require Docker but do not require the development database or its credentials.
 
 ## Configure the Local Database
 
@@ -85,9 +86,11 @@ Stop the application with Ctrl+C. Stop the development database with `docker com
 
 The migration suite checks fresh setup, repeat migration/validation, reference data, exact decimal storage, required values, unique identifiers, invalid salaries, reference integrity, and protected lookup deletion. Each test rolls back its changes; its disposable database is separate from the persistent development database.
 
-The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Currency-specific input validation, employee workflows, concurrency behavior, and analytics tests will accompany their features.
+Employee-creation unit tests cover normalization, international names, positive plain-decimal salaries, storage boundaries, currency precision, and precise conflict classification. Creation integration tests start the real Spring application against a separate disposable PostgreSQL database, check committed values through JDBC, and verify invalid requests leave no records. They also verify normalized duplicates and two concurrent same-number requests. Creation tests clear only their own disposable database between cases and close the application before stopping its container.
 
-Flyway owns schema changes. Add new versioned migration files for changes after a migration has been committed/applied; do not rewrite completed migrations. Hibernate schema generation and separate `schema.sql`/`data.sql` initialization are not used.
+The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Editing/stale-form behavior, listing, analytics, and HTTP/security tests remain future work. There is no HTTP entry point to the creation service yet; authentication will precede exposure of employee endpoints.
+
+Flyway owns schema changes. Add new versioned migration files for changes after a migration has been committed/applied; do not rewrite completed migrations. Hibernate validates the schema at startup and does not generate it. Separate `schema.sql`/`data.sql` initialization and Open Session in View are disabled.
 
 ## Design Documents
 
