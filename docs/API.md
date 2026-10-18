@@ -1,6 +1,6 @@
 # API Contracts and Business Rules
 
-**Status:** Approved MVP project contract, subject to Incubyte clarification. The employee-creation application service/persistence and authentication/session/CSRF endpoints are implemented and tested. Employee, analytics, and reference-data HTTP endpoints remain unimplemented; their paths are protected by authentication. Typed employee service command/result records are internal application values, not HTTP DTOs.
+**Status:** Approved MVP project contract, subject to Incubyte clarification. Employee creation (`POST /api/v1/employees`) and authentication/session/CSRF endpoints are implemented and tested. Employee retrieval/listing/editing, analytics, and reference-data HTTP endpoints remain unimplemented; their paths are protected by authentication. Dedicated HTTP DTOs map typed application values to the approved string contract.
 
 ## Conventions
 
@@ -25,9 +25,13 @@ Use JSON REST endpoints under `/api/v1`, with explicit request/response DTOs. Pa
 
 There is no employee deletion, partial-update, or separate salary-update endpoint in the MVP. `PUT` updates an existing employee; a missing employee returns `404` rather than creating a record.
 
+Only `POST /api/v1/employees` is currently implemented in this table. Its `Location` identifies the created record; retrieval will follow in a later step. Until listing exists, an authenticated `GET /api/v1/employees` returns `405` with an `Allow` header.
+
 ### Requests and Employee Response
 
 Create requests contain `employeeNumber`, `fullName`, `departmentId`, `countryCode`, `salaryAmount`, and `currencyCode`. Update requests contain all of these fields plus `version`. Missing required fields, unknown write fields, and attempts to assign server-managed fields are rejected with `400`.
+
+Creation accepts a JSON object with six string-valued fields; numbers/booleans are not coerced into strings. Trailing JSON tokens are rejected. Jakarta Bean Validation checks required values; application rules handle normalization, names, references, and money. Department IDs must parse exactly as positive `Long` values, without signs, decimal points, exponents, or surrounding whitespace. HTTP response mapping explicitly formats IDs/versions, currency-scale decimal amounts, and UTC timestamps as strings.
 
 Illustrative update request:
 
@@ -175,11 +179,16 @@ Illustrative validation response:
 | `401` | Missing/expired authentication or invalid login: `AUTHENTICATION_REQUIRED`, `INVALID_CREDENTIALS`. |
 | `403` | Invalid CSRF token or denied access: `CSRF_INVALID`, `ACCESS_DENIED`. |
 | `404` | Employee resource not found: `EMPLOYEE_NOT_FOUND`. |
+| `404` | Unmapped HTTP resource: `RESOURCE_NOT_FOUND`; distinct from the future employee lookup's business error. |
+| `405` | Unsupported method on a mapped resource: `METHOD_NOT_ALLOWED`, retaining the `Allow` header. |
+| `406` | Unsupported response media type: `NOT_ACCEPTABLE`. |
 | `409` | Duplicate employee number or stale update: `EMPLOYEE_NUMBER_CONFLICT`, `STALE_EMPLOYEE`. |
 | `415` | Unsupported request content type: `UNSUPPORTED_MEDIA_TYPE`. |
 | `500` | Unexpected failure: `INTERNAL_ERROR`, with a generic public message. |
 
 Problem type identifiers are stable URI references; the sample uses a non-HTTP URN rather than adding problem-document endpoints. Never imply a business failure was successful, or expose implementation exceptions as the public error contract.
+
+Creation validation responses contain safe field/code/message entries. Multiple missing fields are returned in field-name order; business validation may return the first failing rule. Malformed JSON, unknown fields, and wrong JSON types use a generic `INVALID_REQUEST` response rather than parser exception text. Unhandled failures use generic `INTERNAL_ERROR`; application logging records the exception type without the request body or database exception message. Security-filter errors continue to be handled before controller processing.
 
 ## Planned Verification and Future Expansion
 

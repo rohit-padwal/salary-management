@@ -1,6 +1,6 @@
 # Employee Salary Data Model
 
-**Status:** Approved project design for the MVP, subject to Incubyte clarification. The schema/reference records, JPA mappings, and validated employee-creation service are implemented and verified against PostgreSQL 18.6. Editing, listing, analytics, and HTTP endpoints remain future steps.
+**Status:** Approved project design for the MVP, subject to Incubyte clarification. The schema/reference records, JPA mappings, and validated employee creation through HTTP/service/persistence are implemented and verified against PostgreSQL 18.6. Retrieval, editing, listing, and analytics remain future steps.
 
 ## Context and Scope
 
@@ -105,7 +105,9 @@ The initial migration test was run before the SQL existed and failed because zer
 
 `EmployeeCreationIT` boots the application against its own disposable database, verifying Flyway/JPA compatibility, committed creation, currency-specific precision before persistence, exact salary round trips, server metadata, international names, unknown references, invalid requests leaving no records, and sequential/concurrent duplicate conflicts. Unit tests cover input normalization, Unicode character limits, salary rules, and classification of integrity failures. No applied migration was changed to add JPA.
 
-Stale browser edits, pagination, analytics, and HTTP behavior remain application-feature tests for later steps. Creation coverage does not imply those workflows are implemented.
+`EmployeeCreationApiIT` additionally verifies committed creation and duplicate/concurrent conflicts through the authenticated, CSRF-protected endpoint, with exact string serialization and validation/no-write behavior. HTTP DTOs add no schema changes.
+
+Retrieval, stale browser edits, pagination, and analytics remain application-feature tests for later steps. Creation coverage does not imply those workflows are implemented.
 
 ## Future Expansion
 

@@ -4,7 +4,7 @@ Employee salary management for an HR Manager overseeing 10,000 employees across 
 
 ## Current Status
 
-The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. A transactional employee-creation service validates and persists employee data. Session authentication and Angular-compatible CSRF protection are implemented and tested over HTTP. Employee HTTP endpoints, editing/listing, analytics, employee seeding, and the Angular UI remain planned.
+The backend connects to PostgreSQL through JPA and applies its schema/reference data through Flyway. Authenticated employee creation is available through a validated JSON API, with session authentication and Angular-compatible CSRF protection. Retrieval, editing/listing, reference-data/analytics endpoints, employee seeding, and the Angular UI remain planned.
 
 ## Backend Toolchain
 
@@ -15,10 +15,11 @@ The backend connects to PostgreSQL through JPA and applies its schema/reference 
 - Flyway for versioned migrations
 - Spring Data JPA for persistence, with Hibernate schema validation
 - Spring Security for single-account session authentication and CSRF protection
+- Jakarta Bean Validation for required HTTP request fields
 - Spring Boot's managed test starter, including JUnit Jupiter 6 and Mockito
 - Testcontainers for isolated PostgreSQL integration tests
 
-Business validation currently uses independently testable Java rules. Jakarta Bean Validation will accompany employee HTTP input validation.
+Business validation uses independently testable Java rules. Jakarta Bean Validation checks required HTTP fields; dedicated DTOs keep the JSON contract separate from application and persistence types.
 
 ## Build
 
@@ -109,9 +110,28 @@ Authentication endpoints are available under `/api/v1/auth`. The browser/client 
 3. Refresh the token with `GET /csrf` after login. `GET /session` returns only the authenticated username.
 4. `POST /logout` with the current CSRF cookie/header to invalidate the session, then refresh the CSRF token before another login.
 
-Missing/invalid CSRF tokens return `403`, including for login/logout. Unsupported login content types return `415` after CSRF validation. Security failures use `application/problem+json`, without HTML redirects or HTTP Basic challenges. API reads require authentication; employee routes still have no controller, so an anonymous `GET /api/v1/employees` returns `401`, and an authenticated request reaches the unimplemented route (`404`).
+Missing/invalid CSRF tokens return `403`, including for login/logout. Unsupported login content types return `415` after CSRF validation. Security failures use `application/problem+json`, without HTML redirects or HTTP Basic challenges. API reads require authentication. Only employee creation is implemented: anonymous employee requests require login; authenticated `GET /api/v1/employees` currently returns `405` because listing is not implemented.
 
 Stop the application with Ctrl+C. Stop the development database with `docker compose stop db`; its named volume is retained.
+
+## Create an Employee
+
+After login and CSRF refresh, send `POST /api/v1/employees` with `Content-Type: application/json`, the session/CSRF cookies, and the `X-XSRF-TOKEN` header:
+
+```json
+{
+  "employeeNumber": "EMP-000001",
+  "fullName": "Asha Rao",
+  "departmentId": "1",
+  "countryCode": "IN",
+  "salaryAmount": "125000.12",
+  "currencyCode": "USD"
+}
+```
+
+The example department must exist in your database. Success returns `201`, a normalized employee response, and `Location: /api/v1/employees/{id}`. IDs/versions and salaries are JSON strings; timestamps are UTC strings. Salary is formatted to its currency's minor units. The response contains the six editable fields plus ID, version, timestamps, department name, and country name. Retrieval at `Location` will be implemented in a later step.
+
+All six fields are required strings. Unknown/server-managed fields and non-string values are rejected. Invalid input/reference values return `400`; duplicate normalized numbers return `409 EMPLOYEE_NUMBER_CONFLICT`; unsupported request content types return `415`. Errors use Problem Details without rejected values or database details. Failed validation does not write an employee. Concurrent duplicate requests result in one creation and one conflict.
 
 ## Verification and Testing
 
@@ -121,7 +141,9 @@ Employee-creation unit tests cover normalization, international names, positive 
 
 Security unit tests reject missing/plaintext/malformed account configuration and verify web startup fails without an explicit account. HTTP tests use isolated PostgreSQL and a real embedded server to exercise cookies, login/session/logout, protected reads/mutations, invalid credentials, CSRF rotation and failures, session invalidation/replay, content types, and JSON errors. Secure cookie attributes are checked separately from local HTTP behavior; the tests do not establish production TLS/proxy readiness.
 
-The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Editing/stale-form behavior, listing, analytics, employee HTTP behavior, and the frontend remain future work. There is no HTTP entry point to the creation service yet.
+Employee API integration tests exercise authenticated creation, exact response types/formatting, required fields, strict JSON types/fields, malformed bodies, invalid references and salaries, Unicode limits, duplicates/concurrency, unsupported media types, and access enforcement. Focused unit tests verify IDs above JavaScript's safe integer range and generic error responses that exclude exception details and query values.
+
+The schema starts with eight departments, six countries, six currencies, and no employees. The 10,000-employee seed script is a later step. Retrieval, editing/stale-form behavior, listing, reference-data/analytics endpoints, and the frontend remain future work.
 
 Flyway owns schema changes. Add new versioned migration files for changes after a migration has been committed/applied; do not rewrite completed migrations. Hibernate validates the schema at startup and does not generate it. Separate `schema.sql`/`data.sql` initialization and Open Session in View are disabled.
 

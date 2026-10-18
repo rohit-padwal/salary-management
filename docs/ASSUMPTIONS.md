@@ -31,7 +31,7 @@ Spring Security is implemented for single-account session login/logout, protecte
 
 The approved backend bootstrap uses Java 21, Spring Boot 4.1.1, Spring MVC, Maven Wrapper 3.9.11, and Boot's managed JUnit Jupiter 6/Mockito test starter. JUnit 6 replaces the original JUnit 5 preference with user approval. Explicitly select Java 21 through `JAVA_HOME` because the local global Maven otherwise uses Java 25. No global tooling or shell-profile changes are needed.
 
-The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. PostgreSQL JDBC/Flyway integration, Spring Data JPA, framework-free employee-creation validation, and Spring Security 7.1.1 are implemented. Hibernate validates the schema; Open Session in View is disabled. Jakarta Bean Validation remains deferred to employee HTTP validation. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
+The standalone backend lives under `backend/` with package `com.acme.salarymanagement`; a future frontend can live separately in the repository. PostgreSQL JDBC/Flyway integration, Spring Data JPA, framework-free employee-creation validation, and Spring Security 7.1.1 are implemented. Hibernate validates the schema; Open Session in View is disabled. Jakarta Bean Validation checks required fields on the implemented employee-creation HTTP endpoint. Modern Angular acceptance is still unconfirmed by Incubyte. Clear boundaries support change but do not guarantee future requirements will require no refactoring.
 
 ## Approved Data Model Decisions
 
@@ -39,7 +39,7 @@ The user approved [DATA_MODEL.md](DATA_MODEL.md): four tables (`employees`, `dep
 
 Employee management owns the employee entity/repository; compensation owns monetary rules; employee application services coordinate combined updates atomically; analytics owns read-only projections. One employee version supports optimistic locking; the API requires the original browser-edit version in each full update and reports stale edits as `409`.
 
-The approved first employee feature creates validated records through an application service, without an HTTP entry point. It uses read-only reference mappings, validates currency precision before persistence, and relies on the unique constraint for race-safe employee-number conflicts. Names are limited by Unicode code points, matching PostgreSQL character counting; null characters are rejected because PostgreSQL text cannot store them. Typed application values are distinct from the future HTTP string contract. Database-sourced Hibernate timestamp mappings are accepted; editing/stale-form behavior is still pending.
+The first employee feature creates validated records through an application service and authenticated/CSRF-protected `POST /api/v1/employees`. It uses read-only reference mappings, validates currency precision before persistence, and relies on the unique constraint for race-safe employee-number conflicts. Names are limited by Unicode code points, matching PostgreSQL character counting; null characters are rejected because PostgreSQL text cannot store them. Dedicated HTTP DTOs map typed application values to the string contract. Database-sourced Hibernate timestamp mappings are accepted; editing/stale-form behavior is still pending.
 
 Start with primary-key/uniqueness indexes and employee indexes on `(department_id, id)` and `(country_code, id)`. Finalize other indexes against query contracts and measurements. Do not assume B-tree indexes accelerate arbitrary name substring searches. Use a unique ID as the final sort tie-breaker.
 
@@ -55,7 +55,9 @@ Use RFC 9457 Problem Details, including security-filter failures. Duplicate empl
 
 Authentication/session/CSRF endpoints and security-filter errors are implemented and tested over HTTP. The account comes from external `HR_USERNAME` and raw BCrypt `HR_PASSWORD_HASH`; cost 12 is recommended and at least 10 is required. No credentials are generated or defaulted. Web startup fails on missing/malformed account settings. Password and hash values are not returned or explicitly logged. The shared account remains a demo access mechanism rather than individual identity management. Local setup is documented in the README; production HTTPS/proxy settings remain deployment work.
 
-Employee/reference-data/analytics HTTP endpoints remain approved contracts awaiting implementation. An internal employee-creation service exists, but no employee controller exposes it yet. Query implementation and production runtime verification remain later steps.
+Employee creation is implemented through HTTP. Strict JSON rejects non-string values for its fields, unknown/server-managed fields, and trailing tokens. Controller validation/error handling returns the approved field errors, generic malformed-request errors, and duplicate conflicts; unexpected responses omit exception details. Required-field errors are ordered by field name. There are no new migrations or changes to monetary rules for this HTTP step.
+
+Employee retrieval/listing/editing and reference-data/analytics HTTP endpoints remain approved contracts awaiting implementation. Creation returns its resource `Location`, but retrieval is a later step. Query implementation and production runtime verification remain later steps.
 
 ## Questions Awaiting Resolution
 
